@@ -1,0 +1,65 @@
+{
+  "title": "It read the menu before we left",
+  "angle": "demo-the-magic",
+  "hookId": "DM-04",
+  "ctaId": "CTA-01",
+  "capabilities": ["find_places_nearby", "research_place", "read_webpage", "remember_preference"],
+  "ct": "dm-2609",
+
+  "slides": [
+    {
+      "type": "hook",
+      "kicker": "One question, one answer",
+      "headline": "It found the restaurant, then //[[gold]]read me the actual menu[[/gold]]",
+      "sub": "Not a review score. The dishes."
+    },
+    {
+      "type": "body",
+      "step": "WHAT I ASKED",
+      "headline": "\"Is there an Italian place near here, and what's good?\"",
+      "body": "One sentence. Not a search, not a filter, not three apps."
+    },
+    {
+      "type": "body",
+      "step": "STEP ONE",
+      "headline": "It found real places, with real distances",
+      "body": "Actual businesses from the map, sorted by how far away they genuinely are — not sponsored listings, not a chain branch four suburbs over."
+    },
+    {
+      "type": "body",
+      "step": "STEP TWO",
+      "headline": "Then it [[gold]]opened the restaurant's own site[[/gold]]",
+      "body": "Found the menu link, followed it, and read what's on it. This is the part other assistants skip — they hand you the link and stop."
+    },
+    {
+      "type": "quote",
+      "turns": [
+        { "who": "argus", "text": "Onesto, about half a mile. Their menu's got a pork belly with honeycomb agrodolce at eighteen, and the pastas are all house-made." },
+        { "who": "you", "text": "Anything on there I can't eat?" },
+        { "who": "argus", "text": "The burrata starter, and I'd ask about the pesto." }
+      ]
+    },
+    {
+      "type": "body",
+      "step": "WHY IT MATTERS",
+      "headline": "\"What's good there\" is a real question",
+      "body": "Star ratings tell you a place exists. The menu tells you whether to go. Argus reads the second one."
+    },
+    {
+      "type": "cta",
+      "headline": "Ask it where to eat tonight",
+      "body": "Free. iPhone. No sign-up.",
+      "pill": "Link in bio"
+    }
+  ],
+
+  "caption": {
+    "tiktok": "Asked it for an Italian place nearby and what's good there. It found real restaurants with real distances, then opened the actual menu and read it back — dishes and prices, not a star rating.\n\nFree on iPhone, link in bio.",
+    "instagram": "\"Is there an Italian place near here, and what's good?\"\n\nMost assistants answer the first half and hand you a link. Argus does both — real places from the map with honest distances, then it opens the restaurant's own site, finds the menu and tells you what's actually on it. Including which bits you can't eat, if it knows that about you.\n\nSend this to whoever you argue with about where to eat.\n\nFree on iPhone — link in bio."
+  },
+
+  "hashtags": {
+    "tiktok": ["wheretoeat", "foodie", "restaurants", "dinnerplans", "aiapp", "iphoneapps", "localeats", "datenight"],
+    "instagram": ["wheretoeat", "foodie", "restaurantfinder", "dinnerplans", "localeats", "datenightideas", "aitools", "iphoneapp", "foodiefinds", "eatlocal"]
+  }
+}

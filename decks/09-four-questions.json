@@ -1,0 +1,65 @@
+{
+  "title": "Four questions faster to show than to type",
+  "angle": "things-you-didnt-know",
+  "hookId": "TY-03",
+  "ctaId": "CTA-05",
+  "capabilities": ["read_text", "diagnose_problem", "compare_products", "get_recipe_suggestion", "manage_shopping_list"],
+  "ct": "ty-2609",
+
+  "slides": [
+    {
+      "type": "hook",
+      "kicker": "Try these first",
+      "headline": "4 questions that are faster to //[[gold]]show[[/gold]] than to type"
+    },
+    {
+      "type": "body",
+      "step": "01",
+      "headline": "\"What does this say?\"",
+      "body": "A label, a tag, a sign, a handwritten note, cooking instructions across the kitchen. It reads it out loud."
+    },
+    {
+      "type": "body",
+      "step": "02",
+      "headline": "\"What's wrong with this?\"",
+      "body": "A leak, a loose joint, a plant going brown, a part that looks bent. It names the thing and says what usually causes it."
+    },
+    {
+      "type": "body",
+      "step": "03",
+      "headline": "\"Which of these two?\"",
+      "body": "Hold both up. Salt, sugar, price per unit, whichever thing you actually care about — say which and it compares on that."
+    },
+    {
+      "type": "body",
+      "step": "04",
+      "headline": "\"What can I make with this?\"",
+      "body": "Open the fridge and ask. It works from what's on the shelf, and leaves out anything you've told it you can't eat."
+    },
+    {
+      "type": "list",
+      "headline": "And one it's quietly good at",
+      "items": [
+        { "text": "\"Add that to the list\"", "note": "the shopping list is still there tomorrow, and next week" },
+        { "text": "\"What's left on it?\"", "note": "asked in the shop, hands full, without unlocking anything" }
+      ]
+    },
+    {
+      "type": "cta",
+      "headline": "Pick one and try it tonight",
+      "body": "Free on iPhone. No account to make.",
+      "pill": "Comment ARGUS for the link",
+      "fineprint": "Or it's in the bio."
+    }
+  ],
+
+  "caption": {
+    "tiktok": "Four things that take ten seconds to show and a paragraph to type: what does this say, what's wrong with this, which of these two, what can I make with this.\n\nPick one and try it tonight. Free on iPhone, link in bio.\n\nComment ARGUS if you'd rather I send it.",
+    "instagram": "Four questions that are faster to show than to type:\n\n1. What does this say?\n2. What's wrong with this?\n3. Which of these two?\n4. What can I make with this?\n\nAll of them take ten seconds pointed at the thing and a whole paragraph typed out. Argus is looking while you ask, so the question stays short.\n\nComment ARGUS and I'll send you the link — or it's in the bio. Free, iPhone."
+  },
+
+  "hashtags": {
+    "tiktok": ["lifehack", "iphonetips", "aiapp", "iphoneapps", "techtips", "kitchenhack", "shoppingtips", "aitools"],
+    "instagram": ["lifehacks", "iphonetips", "aitools", "iphoneapp", "techtips", "kitchenhacks", "shoppinghacks", "appsyouneed", "smartphonetips", "productivity"]
+  }
+}

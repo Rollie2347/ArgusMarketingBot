@@ -1,0 +1,7 @@
+# Secrets. TELEGRAM_BOT_TOKEN, IG_ACCESS_TOKEN — never commit, never print.
+.env
+
+# Approval queue and delivery state. Operator-local, rebuildable with
+# `node bot/enqueue.mjs`, and it records what has already been published —
+# which must not be shared or restored from a stale git checkout.
+state/

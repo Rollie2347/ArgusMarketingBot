@@ -1,0 +1,68 @@
+{
+  "title": "Before: describing it. After: showing it.",
+  "angle": "before-after",
+  "hookId": "BA-04",
+  "ctaId": "CTA-01",
+  "capabilities": ["diagnose_problem", "identify_scene", "read_text", "compare_products"],
+  "ct": "ba-2609",
+
+  "slides": [
+    {
+      "type": "hook",
+      "kicker": "The whole idea, in one line",
+      "headline": "Before: describing the broken thing. //After: [[gold]]showing[[/gold]] it."
+    },
+    {
+      "type": "split",
+      "headline": "A wobbly chair",
+      "beforeTag": "Typing",
+      "before": "\"wooden chair back leg loose where it meets the seat, no visible screw\" — 40 seconds, three rewrites, still wrong.",
+      "afterTag": "Showing",
+      "after": "You turn the chair over and ask what's loose."
+    },
+    {
+      "type": "split",
+      "headline": "A plant that looks unhappy",
+      "beforeTag": "Typing",
+      "before": "\"leaves yellow at edges brown in middle drooping\" — every result is a different plant.",
+      "afterTag": "Showing",
+      "after": "You point at the leaf."
+    },
+    {
+      "type": "split",
+      "headline": "Two tins in a shop",
+      "beforeTag": "Typing",
+      "before": "Search one brand. Search the other. Open two tabs. Compare on a phone in an aisle.",
+      "afterTag": "Showing",
+      "after": "Hold both up. \"Which one?\""
+    },
+    {
+      "type": "body",
+      "step": "THE REASON IT WORKS",
+      "headline": "Describing is the hard part, and you were doing it for free",
+      "body": "Turning a thing you can see into words precise enough to search is real work. Hand that to the camera and the question gets short."
+    },
+    {
+      "type": "body",
+      "step": "IT'S A CONVERSATION",
+      "headline": "You can just say \"no, the other one\"",
+      "body": "It's still looking while you talk, so you correct it the way you'd correct a person stood next to you. No re-typing the whole question."
+    },
+    {
+      "type": "cta",
+      "headline": "Stop describing things to your phone",
+      "body": "Free. iPhone. No sign-up.",
+      "pill": "Link in bio"
+    }
+  ],
+
+  "caption": {
+    "tiktok": "Half the effort of searching for anything is turning a thing you can see into words precise enough to search. Skip it — hold the thing up and ask.\n\nFree on iPhone, link in bio.",
+    "instagram": "\"wooden chair back leg loose where it meets the seat no visible screw\"\n\nThat sentence took you forty seconds and it still didn't work. Describing is the hard part — and you were doing it for free.\n\nArgus is looking at the thing while you talk, so the question gets short and you can just say \"no, the other one\".\n\nSend this to the person who types paragraphs into a search bar.\n\nFree on iPhone — link in bio."
+  },
+
+  "hashtags": {
+    "tiktok": ["lifehack", "techtips", "aiapp", "iphoneapps", "diy", "productivity", "aitools", "phonetricks"],
+    "instagram": ["lifehacks", "techtips", "aitools", "iphoneapp", "diy", "productivity", "appsyouneed", "smartphonetips", "problemsolving", "newapps"]
+  }
+}

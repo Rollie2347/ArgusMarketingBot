@@ -1,0 +1,70 @@
+{
+  "title": "Why you keep re-explaining yourself",
+  "angle": "curiosity-gap",
+  "hookId": "CG-04",
+  "ctaId": "CTA-04",
+  "capabilities": ["remember_preference", "recall_memory", "forget_memory", "update_profile"],
+  "ct": "cg-2609",
+
+  "slides": [
+    {
+      "type": "hook",
+      "kicker": "Nobody says this out loud",
+      "headline": "There's a reason you keep //[[gold]]re-explaining yourself[[/gold]] to AI"
+    },
+    {
+      "type": "body",
+      "step": "THE REASON",
+      "headline": "Most of them start from nothing every time",
+      "body": "Close the app and the conversation is gone. Your name, the allergy, the fact you don't eat meat on weekdays — all of it, every time."
+    },
+    {
+      "type": "body",
+      "step": "WHAT THAT COSTS",
+      "headline": "You end up narrating your own life, daily",
+      "body": "And because it's tedious, you stop bothering — so you get generic answers, which is what made it feel useless in the first place."
+    },
+    {
+      "type": "quote",
+      "headline": "What it looks like when it sticks",
+      "turns": [
+        { "who": "you", "text": "Remember I can't have shellfish." },
+        { "who": "argus", "text": "Got it." },
+        { "who": "you", "text": "[next week, in a shop] What about this one?" },
+        { "who": "argus", "text": "That's got shrimp paste in it — skip it." }
+      ]
+    },
+    {
+      "type": "list",
+      "headline": "What it holds on to",
+      "items": [
+        { "text": "Your name, and the people you mention", "note": "so it knows who \"my daughter\" is" },
+        { "text": "Allergies and dietary rules" },
+        { "text": "A shopping list that's still there tomorrow" },
+        { "text": "How you like it to talk to you", "note": "blunt, warm, chatty, brief — you pick" }
+      ]
+    },
+    {
+      "type": "body",
+      "step": "AND THE OTHER WAY",
+      "headline": "You can make it [[gold]]forget[[/gold]], too",
+      "body": "Tell it to drop something and it's gone. Delete the lot from inside the app whenever you want. Memory you can't undo isn't a feature, it's a problem."
+    },
+    {
+      "type": "cta",
+      "headline": "Tell it once. That's the whole pitch.",
+      "body": "Free on iPhone. No account to make.",
+      "pill": "Link in bio"
+    }
+  ],
+
+  "caption": {
+    "tiktok": "The reason AI apps feel useless isn't the model — it's that they forget you the second you close them. So you stop bothering to explain, and you get generic answers forever.\n\nArgus keeps the things that matter: the allergy, the names, the list. And it'll forget them on request.\n\nFree on iPhone, link in bio.",
+    "instagram": "You've told it four times. It has no idea.\n\nMost assistants start from zero every session, so anything worth knowing about you has to be re-typed daily — and because that's tedious, you stop, and then the answers get generic. That's the actual loop.\n\nArgus keeps your name, your allergies, the people you mention and a shopping list across sessions. It'll also drop any of it when you ask, and you can delete everything from inside the app.\n\nSend this to whoever keeps retyping their allergy into a chatbot.\n\nFree on iPhone — link in bio."
+  },
+
+  "hashtags": {
+    "tiktok": ["aiapp", "aitools", "iphoneapps", "productivity", "techtips", "foodallergies", "assistant", "newapp"],
+    "instagram": ["aitools", "aiapp", "iphoneapp", "productivity", "techtips", "foodallergy", "personalassistant", "appsyouneed", "memory", "newapps"]
+  }
+}

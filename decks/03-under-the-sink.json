@@ -1,0 +1,66 @@
+{
+  "title": "Something under the sink is wet",
+  "angle": "problem-solution",
+  "hookId": "PS-03",
+  "ctaId": "CTA-03",
+  "capabilities": ["diagnose_problem", "identify_scene", "read_text"],
+  "ct": "ps-2609",
+
+  "slides": [
+    {
+      "type": "hook",
+      "kicker": "Saturday, 9am",
+      "headline": "Something under the sink is wet and //[[gold]]you don't know what you're looking at[[/gold]]"
+    },
+    {
+      "type": "body",
+      "step": "THE SEARCH THAT FAILS",
+      "headline": "You can't google a thing you can't name",
+      "body": "\"Pipe bit under sink leaking\" returns nine forum threads about a different pipe and a video of a man in a van."
+    },
+    {
+      "type": "body",
+      "step": "THE DIFFERENCE",
+      "headline": "You don't describe it. //You [[gold]]show[[/gold]] it.",
+      "body": "Argus is looking at the same thing you are, live, while you talk. Naming it is its job, not yours."
+    },
+    {
+      "type": "quote",
+      "turns": [
+        { "who": "you", "text": "What is this and how bad is it?" },
+        { "who": "argus", "text": "That's the P-trap, and the water's coming from the slip nut above it — not the pipe itself. Usually that's a worn washer. Hand-tighten it first and watch for a minute." }
+      ]
+    },
+    {
+      "type": "body",
+      "step": "WHILE YOUR HANDS ARE FULL",
+      "headline": "You can keep talking to it",
+      "body": "No screen to tap, no wake word, no going back to re-read step three. Ask it again from under the cupboard."
+    },
+    {
+      "type": "split",
+      "headline": "The honest version",
+      "beforeTag": "It won't",
+      "before": "Replace a plumber on anything structural, or tell you it's safe when it can't see enough.",
+      "afterTag": "It will",
+      "after": "Name the part, tell you what usually causes it, and say when it's beyond a washer."
+    },
+    {
+      "type": "cta",
+      "headline": "Try it on the next thing you can't identify",
+      "body": "Free. iPhone.",
+      "pill": "Link in bio",
+      "fineprint": "Argus sees through your camera and talks in real time using Google's Gemini Live."
+    }
+  ],
+
+  "caption": {
+    "tiktok": "You can't search for a part you can't name. So don't — show it instead. Argus looks at the leak with you, tells you which bit it is, and what usually causes it, while your hands are still under the cupboard.\n\nFree on iPhone, link in bio.",
+    "instagram": "The worst kind of home repair is the one where you don't know the word for the thing.\n\nArgus watches through your camera while you talk. It names the part, says what normally causes that, and tells you when it's past a DIY fix — which is the bit most advice leaves out.\n\nSend this to the person in your life who Googles \"pipe bit under sink\".\n\nFree on iPhone — link in bio."
+  },
+
+  "hashtags": {
+    "tiktok": ["diy", "homerepair", "plumbing", "fixit", "homeowner", "aiapp", "iphoneapps", "handy"],
+    "instagram": ["diy", "diyhome", "homerepair", "plumbingrepair", "fixitup", "firsttimehomebuyer", "homeownertips", "aitools", "iphoneapp", "handyman"]
+  }
+}

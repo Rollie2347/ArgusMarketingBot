@@ -1,0 +1,69 @@
+{
+  "title": "Your camera has been able to do this for a year",
+  "angle": "curiosity-gap",
+  "hookId": "CG-01",
+  "ctaId": "CTA-03",
+  "capabilities": ["identify_scene", "read_text", "diagnose_problem", "compare_products"],
+  "ct": "cg-2609",
+
+  "slides": [
+    {
+      "type": "hook",
+      "kicker": "Mildly annoying fact",
+      "headline": "Your phone camera has been able to do this //for about a year. //[[gold]]Nobody told you.[[/gold]]"
+    },
+    {
+      "type": "body",
+      "step": "WHAT CHANGED",
+      "headline": "Models started watching video and listening at the same time",
+      "body": "Not \"take a photo, wait, read a paragraph back\". A live stream, both directions, while you're still talking."
+    },
+    {
+      "type": "body",
+      "step": "WHY YOU DIDN'T NOTICE",
+      "headline": "It mostly got used for demos",
+      "body": "Impressive on a stage, nowhere near your actual Tuesday. The useful version is boring: point it at a thing, ask about the thing."
+    },
+    {
+      "type": "list",
+      "headline": "What that's good for, honestly",
+      "items": [
+        { "text": "Reading something too small to read" },
+        { "text": "Naming a part you can't name" },
+        { "text": "Choosing between two things in your hands" },
+        { "text": "Working out dinner from what's actually in the fridge" }
+      ]
+    },
+    {
+      "type": "split",
+      "headline": "The unglamorous test",
+      "beforeTag": "Demo version",
+      "before": "Identifies the Eiffel Tower. Describes a sunset. Reads a QR code you could have scanned.",
+      "afterTag": "Useful version",
+      "after": "Tells you which of these two tins has less salt, while you're stood in the aisle holding both."
+    },
+    {
+      "type": "body",
+      "step": "THE CATCH, SAID PLAINLY",
+      "headline": "It needs to see and hear to do it",
+      "body": "Camera and voice stream to Google's Gemini while a session is open. Argus says so before you start, and nothing happens when you're not connected."
+    },
+    {
+      "type": "cta",
+      "headline": "Try it on the next thing you can't identify",
+      "body": "Free. iPhone.",
+      "pill": "Link in bio",
+      "fineprint": "No account, no password. Delete everything from inside the app."
+    }
+  ],
+
+  "caption": {
+    "tiktok": "Phones have been able to do this for about a year and it mostly got used for stage demos. The useful version is unglamorous: point it at the thing you can't read, can't name, or can't choose between, and ask.\n\nFree on iPhone, link in bio.",
+    "instagram": "Live camera + live voice models have existed for roughly a year. Almost all of it got spent identifying landmarks on stage.\n\nThe actually useful version is much more boring — which tin has less salt, what is this part called, what can I make with this. That's what Argus is for.\n\nIt does need to see and hear while you're connected, and it tells you that up front.\n\nSend this to someone who thinks AI apps are all the same.\n\nFree on iPhone — link in bio."
+  },
+
+  "hashtags": {
+    "tiktok": ["techtips", "aiapp", "iphonetips", "iphoneapps", "didyouknow", "gadgets", "aitools", "phonetricks"],
+    "instagram": ["techtips", "aitools", "iphonetips", "iphoneapp", "didyouknow", "gadgets", "appsyouneed", "technology", "phonehacks", "newapps"]
+  }
+}

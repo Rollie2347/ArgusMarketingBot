@@ -1,0 +1,64 @@
+{
+  "title": "Which of these two is actually better",
+  "angle": "problem-solution",
+  "hookId": "PS-04",
+  "ctaId": "CTA-02",
+  "capabilities": ["compare_products", "read_text", "manage_shopping_list", "remember_preference"],
+  "ct": "ps-2609",
+
+  "slides": [
+    {
+      "type": "hook",
+      "kicker": "Aisle standoff",
+      "headline": "Two boxes. Same price. //[[gold]]No idea which one.[[/gold]]",
+      "sub": "You've been stood here for ninety seconds."
+    },
+    {
+      "type": "body",
+      "step": "WHY IT'S HARD",
+      "headline": "The numbers aren't comparable on purpose",
+      "body": "One's per 100g, one's per serving, and the serving is a size nobody eats. That isn't an accident."
+    },
+    {
+      "type": "body",
+      "step": "WHAT YOU DO",
+      "headline": "Hold both up and say what you care about",
+      "body": "Salt. Sugar. Protein. Price per unit. Whatever it actually is — it compares on that, not on a generic score."
+    },
+    {
+      "type": "quote",
+      "turns": [
+        { "who": "you", "text": "Which of these has less sugar, really?" },
+        { "who": "argus", "text": "The left one looks lower, but that's per 30g and the other's per 45g. Evened out, the right one's lower — 9g against 11." }
+      ]
+    },
+    {
+      "type": "body",
+      "step": "THE SECOND HALF",
+      "headline": "\"Add the other one to the list\"",
+      "body": "And it's still on the list tomorrow, and the week after. You don't lose it the moment you close the app."
+    },
+    {
+      "type": "body",
+      "step": "IT KNOWS YOUR RULES",
+      "headline": "It won't recommend the one you can't eat",
+      "body": "Tell it once about the allergy or the diet. From then on that's part of every comparison, without you saying it again."
+    },
+    {
+      "type": "cta",
+      "headline": "Take it to the shop this week",
+      "body": "Free on iPhone, no sign-up, and you can delete everything in one tap.",
+      "pill": "Link in bio"
+    }
+  ],
+
+  "caption": {
+    "tiktok": "Two boxes, same price, and the nutrition panels aren't comparable on purpose — one's per 30g, one's per 45g. Hold both up, say what you care about, and it does the maths out loud.\n\nThen tell it to add the other one to the list, and the list is still there next week.\n\nFree on iPhone, link in bio.",
+    "instagram": "The per-serving trick is not an accident. One box is per 30g, the other per 45g, and the comparison you're trying to make in the aisle is genuinely hard.\n\nHold both up, say whether you care about sugar or salt or price per unit, and Argus evens them out and tells you. Then \"add the other one to the list\" — and the list survives until you next shop.\n\nSend this to whoever does the big shop in your house.\n\nFree on iPhone — link in bio."
+  },
+
+  "hashtags": {
+    "tiktok": ["grocerytips", "shoppingtips", "supermarket", "healthyeating", "aiapp", "iphoneapps", "budgeting", "nutrition"],
+    "instagram": ["grocerytips", "shoppinghacks", "supermarketsweep", "healthyeating", "nutritionfacts", "aitools", "iphoneapp", "mealprep", "budgetgrocery", "foodlabels"]
+  }
+}

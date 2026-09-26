@@ -1,0 +1,68 @@
+{
+  "title": "The label you can't read",
+  "angle": "problem-solution",
+  "hookId": "PS-02",
+  "ctaId": "CTA-06",
+  "capabilities": ["read_text", "remember_preference"],
+  "ct": "ps-2609",
+
+  "slides": [
+    {
+      "type": "hook",
+      "kicker": "Aisle four",
+      "headline": "Six-point type on the back of a jar, //[[gold]]in a dim shop[[/gold]]",
+      "sub": "You're holding it at arm's length. It isn't helping."
+    },
+    {
+      "type": "body",
+      "step": "WHAT YOU DO NOW",
+      "headline": "Photo, pinch, zoom, squint, give up",
+      "body": "Or you put the jar back and buy the one you already know, which is how you've eaten the same four things for a year."
+    },
+    {
+      "type": "body",
+      "step": "WHAT ARGUS DOES",
+      "headline": "You hold it up and it [[gold]]reads it to you[[/gold]]",
+      "body": "Ingredients, allergen line, the serving size the numbers are actually based on. Out loud, while the jar is still in your hand."
+    },
+    {
+      "type": "quote",
+      "turns": [
+        { "who": "you", "text": "Is there anything in this I shouldn't have?" },
+        { "who": "argus", "text": "It lists milk powder, third ingredient. You told me dairy was out — I'd put this one back." }
+      ]
+    },
+    {
+      "type": "body",
+      "step": "THE BIT PEOPLE MISS",
+      "headline": "You only tell it once",
+      "body": "Say the allergy a single time and it's there in every session afterwards — next week, next shop, without you raising it again."
+    },
+    {
+      "type": "list",
+      "headline": "Also readable",
+      "items": [
+        { "text": "Washing instructions on a clothing tag", "note": "the ones printed in grey on grey" },
+        { "text": "A handwritten note someone left you" },
+        { "text": "Cooking instructions on a packet across the kitchen" },
+        { "text": "A form, a sign, a screen, a receipt" }
+      ]
+    },
+    {
+      "type": "cta",
+      "headline": "Next unreadable thing, just ask",
+      "body": "Free on iPhone. No account, no password, and you can delete everything in one tap.",
+      "pill": "Link in bio"
+    }
+  ],
+
+  "caption": {
+    "tiktok": "Nutrition labels are printed for ants and shops are lit like caves. Hold the phone up, ask what's in it, and it reads the thing to you — including whether it's got the one ingredient you can't have, because you only have to tell it that once.\n\nFree on iPhone, link in bio.",
+    "instagram": "Six-point type, dim shop, jar held at arm's length. We've all done it.\n\nArgus reads labels out loud through the camera — ingredients, allergens, the serving size the numbers actually refer to. And it remembers what you can't eat, so it just tells you to put the jar back.\n\nSend this to whoever reads every label in the shop.\n\nFree on iPhone — link in bio."
+  },
+
+  "hashtags": {
+    "tiktok": ["grocerytips", "foodallergies", "labelreading", "shoppingtips", "aiapp", "iphoneapps", "accessibility", "lifehack"],
+    "instagram": ["grocerytips", "foodallergy", "allergyfriendly", "labelreading", "shoppinghacks", "aitools", "iphoneapp", "accessibility", "lowvision", "celiac"]
+  }
+}

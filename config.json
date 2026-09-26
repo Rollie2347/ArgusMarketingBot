@@ -1,0 +1,16 @@
+{
+  "appName": "Argus",
+  "ascAppId": "6761696821",
+  "appStoreUrl": "https://apps.apple.com/app/apple-store/id6761696821",
+
+  "providerToken": null,
+  "_providerToken_note": "The `pt` value. Apple GENERATES this the first time you create a campaign link in App Store Connect — you cannot invent one. ASC only shows the Campaigns tab once the app has analytics data, so this may not be obtainable yet. See RESEARCH.md §5.2. While it is null, make-slideshow.mjs emits the plain App Store URL and says so in the deck's manifest.",
+
+  "redirectBase": null,
+  "_redirectBase_note": "SET THIS TO \"https://argus-798059802495.us-central1.run.app/g\" ONCE THE BACKEND IS DEPLOYED. The GET /g/:slug route is now built and tested in backend/server.js, but it is NOT yet on the live revision — so filling this in before deploying would print live-looking bio links that 404. Deploy, verify with `curl -sI https://argus-798059802495.us-central1.run.app/g/test` (expect 302 to apps.apple.com), then set this and re-run make-slideshow.mjs. A post's link becomes <redirectBase>/<deckId>-<tt|ig>.",
+
+  "handle": "@argus.app",
+  "_handle_note": "Placeholder. Replace with the real handle once the TikTok Business account and IG account are registered — it is printed on every slide footer, so set it before generating the batch you actually post.",
+
+  "platforms": ["tiktok", "instagram"]
+}
