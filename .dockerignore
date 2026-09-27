@@ -1,0 +1,8 @@
+# Secrets and state never go into the image — they come from the platform's
+# env store and the /data volume.
+bot/.env
+bot/state/
+out/
+assets/generated/
+FEEDBACK.md
+**/node_modules

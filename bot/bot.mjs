@@ -4,10 +4,20 @@
  *
  *   node bot/bot.mjs
  *
- * Long-polls Telegram, delivers queued slideshows to ONE authorised chat with
- * Approve / Reject / Request changes buttons, and on approval hands the item
- * to a publisher. Rejections and change requests are written to
- * marketing/FEEDBACK.md, which is the input to the next batch's hook library.
+ * The one long-running process of the marketing pipeline:
+ *
+ *   1. once a day (DAILY_RUN_AT) or on /generate, runs scripts/daily.mjs —
+ *      the model writes the decks, images are generated, slides rendered and
+ *      queued
+ *   2. delivers each deck to ONE authorised Telegram chat as an album plus a
+ *      card: Approve both / TikTok only / Instagram only / Reject / Changes
+ *   3. on approval, schedules each platform into its next free posting slot
+ *      (POST_TIMES, POSTS_PER_DAY) — or publishes at once if no slots are set
+ *   4. at the slot, hands the item to its publisher (Upload-Post, or the
+ *      manual hand-off) and reports the result, loudly if it failed
+ *
+ * Rejections and change requests are written to marketing/FEEDBACK.md, which
+ * the next day's deck writer reads — an ❌ with a reason changes tomorrow.
  *
  * ── POLLING, NOT WEBHOOKS ────────────────────────────────────────────────
  * Long polling, and a separate process from the Argus backend. Both halves of
@@ -25,10 +35,11 @@
  *      that CPU with live conversations. The brief for the redirect counter
  *      said a flood must not affect session capacity; the same rule applies
  *      here, and polling satisfies it by not being on that service at all.
- *   3. Polling needs no inbound connectivity whatsoever. It runs from a
- *      laptop, a Pi, or a scale-to-zero job, with no public URL, no TLS cert,
- *      no secret webhook path, and nothing to leave exposed if the process
- *      dies.
+ *   3. Polling needs no inbound connectivity whatsoever — no public URL, no
+ *      TLS cert, no secret webhook path, and nothing to leave exposed if the
+ *      process dies. (It does need to stay RUNNING now: the daily batch and
+ *      the posting slots are timers inside this process. An always-on box,
+ *      not a scale-to-zero job.)
  *   4. The workload is human-paced — a handful of approvals a day. The only
  *      thing polling costs is up to ~30s of latency on a button press, which
  *      is invisible for this task.
@@ -37,22 +48,42 @@
  *      session. Separate process, separate lifecycle.
  *
  * The honest counter-argument: a webhook scales better and costs nothing while
- * idle. At one operator and ten posts a batch, neither matters. If this ever
+ * idle. At one operator and a few posts a day, neither matters. If this ever
  * became multi-operator and high-volume, the answer would flip — and it should
  * still be its own service, not folded into the relay.
  */
 
-import { readFileSync, appendFileSync, existsSync, writeFileSync } from "node:fs";
+import { readFileSync, appendFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { config, validate, describeSecret, OUT_DIR, FEEDBACK_FILE } from "./config.mjs";
+import { spawn } from "node:child_process";
+import { config, validate, describeSecret, OUT_DIR, FEEDBACK_FILE, DAILY_FILE, STATE_DIR, MARKETING_ROOT } from "./config.mjs";
 import * as tg from "./telegram.mjs";
-import { load, save, find, byStatus, transition, summarize, statusIcon } from "./queue.mjs";
+import { load, mutate, find, byStatus, transition, summarize } from "./queue.mjs";
 import { getPublisher, describeMode } from "./publishers/index.mjs";
+import { refreshIfDue } from "./igtoken.mjs";
 
-validate();
+validate({ requirePublishing: true });
 tg.configure(config.botToken);
 
 const CHAT = String(config.allowedChatId);
+
+/* ── publisher choices made from Telegram ────────────────────────────────
+ * /instagram <token> switches Instagram to automatic without touching
+ * bot/.env; the choice is kept in state/publishers.json so it survives a
+ * restart, and it takes precedence over PUBLISH_* in the env (the startup
+ * log prints the modes actually in force).
+ * ------------------------------------------------------------------------ */
+const OVERRIDES_FILE = join(STATE_DIR, "publishers.json");
+function loadOverrides() {
+  try { return JSON.parse(readFileSync(OVERRIDES_FILE, "utf8")); } catch { return {}; }
+}
+function setPublisher(platform, mode) {
+  mkdirSync(STATE_DIR, { recursive: true });
+  writeFileSync(OVERRIDES_FILE, JSON.stringify({ ...loadOverrides(), [platform]: mode }, null, 2), "utf8");
+  config.publishers[platform] = mode;
+}
+Object.assign(config.publishers, loadOverrides());
+const TICK_MS = parseInt(process.env.BOT_TICK_MS || "20000", 10);
 
 /* ── authorisation ────────────────────────────────────────────────────────
  * The bot has one user. Telegram bot usernames are discoverable and anyone
@@ -85,166 +116,466 @@ function refuse(update) {
  * an ampersand".
  * ------------------------------------------------------------------------ */
 const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const clip = (s, n) => { const t = String(s ?? ""); return t.length <= n ? t : `${t.slice(0, n - 1)}…`; };
+const say = (text, extra = {}) => tg.sendMessage(CHAT, text, { parse_mode: "HTML", ...extra }).catch((err) => {
+  console.error(`  ✗ could not send message: ${tg.redact(err.message)}`);
+});
 
-/* ── delivery ─────────────────────────────────────────────────────────── */
+const LABEL = { tiktok: "TikTok", instagram: "Instagram" };
+const label = (p) => LABEL[p] || p;
 
-function cardText(item) {
-  return [
-    `<b>${esc(item.title)}</b> → <b>${esc(item.platform)}</b>`,
-    `${esc(item.angle)} · hook <code>${esc(item.hookId)}</code>${item.ctaId ? ` · cta <code>${esc(item.ctaId)}</code>` : ""}`,
-    "",
-    `<b>Caption</b>`,
-    esc(item.caption),
-    "",
-    esc(item.hashtags.join(" ")),
-    "",
-    `🔗 ${esc(item.trackingUrl || "(no redirect configured — marketing/TRACKING.md item 1)")}`,
-    `🏷 <code>${esc(item.ct || "—")}</code>`,
-    `📦 ${item.slideFiles.length} slides · <code>${esc(item.id)}</code>`,
-  ].join("\n");
+/** "Sat 27 Sep 09:00", in the bot's local time. */
+function when(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
-async function deliver(item) {
-  const dir = join(OUT_DIR, item.deckId, item.platform);
-  const files = item.slideFiles.map((f) => ({ name: f, bytes: readFileSync(join(dir, f)) }));
+/* ── delivery: one card per DECK ──────────────────────────────────────────
+ * The queue still holds one item per deck per platform — they are scheduled,
+ * published and measured separately — but a deck's copy and slides are the
+ * same on both, so it is reviewed once. Three decks a day is three decisions,
+ * not six.
+ * ------------------------------------------------------------------------ */
 
-  // Telegram albums cap at 10. Decks are 6-9 slides, so this only trips if
-  // someone raises the deck size limit — in which case truncating silently
-  // would be the wrong answer, so it says so on the card.
-  const truncated = files.length > 10;
-  await tg.sendMediaGroup(CHAT, files.slice(0, 10), `${item.deckId} → ${item.platform}`);
+function publishModeNote(platform) {
+  const mode = config.publishers[platform] || "manual";
+  const dry = process.env.DRY_RUN === "1" ? " (DRY RUN)" : "";
+  if (mode === "manual") return "manual hand-off";
+  if (mode === "telegram") return "sent to you here at its slot, you post it";
+  if (mode === "instagram") return `auto-posts via the Instagram API${dry}`;
+  if (mode === "tiktokweb") return `auto-posts as a slideshow video (browser bot)${dry}`;
+  if (mode === "uploadpost") return `auto-posts via Upload-Post${dry}`;
+  return mode;
+}
+
+function deckCard(items) {
+  const first = items[0];
+  const lines = [
+    `<b>${esc(first.title)}</b>`,
+    `${esc(first.angle)} · hook <code>${esc(first.hookId)}</code>${first.ctaId ? ` · cta <code>${esc(first.ctaId)}</code>` : ""}`,
+  ];
+  if (first.generated?.by) lines.push(`✎ written by ${esc(first.generated.by)}`);
+  for (const n of first.generated?.notes || []) lines.push(`⚠️ ${esc(clip(n, 200))}`);
+  if (first.aiImages) lines.push("🖼 AI-generated photos — posts carry the platforms' AI-content label");
+
+  for (const it of items) {
+    lines.push(
+      "",
+      `<b>${esc(label(it.platform))}</b> · <i>${esc(publishModeNote(it.platform))}</i>`,
+      esc(clip(it.caption, 700)),
+      esc(clip(it.hashtags.join(" "), 300)),
+      `🔗 ${esc(it.trackingUrl || "(no redirect configured — marketing/TRACKING.md item 1)")}`,
+    );
+  }
+  lines.push("", `📦 ${first.slideFiles.length} slides · <code>${esc(first.deckId)}</code>`);
+  if (config.schedule.times.length) {
+    lines.push(`🗓 Approved posts go out at the next free slot (${config.schedule.times.join(", ")}; ${config.schedule.perDay}/day per platform)`);
+  }
+  return lines.join("\n");
+}
+
+function deckButtons(deckId, platforms) {
+  const rows = [[tg.button(platforms.length > 1 ? "✅ Approve both" : `✅ Approve ${label(platforms[0])}`, `A|${deckId}|*`)]];
+  if (platforms.length > 1) rows.push(platforms.map((p) => tg.button(`✅ ${label(p)} only`, `A|${deckId}|${p}`)));
+  rows.push([tg.button("❌ Reject", `R|${deckId}`), tg.button("✏️ Changes", `C|${deckId}`)]);
+  return tg.keyboard(rows);
+}
+
+async function deliverDeck(items) {
+  // TikTok's 9:16 cut is the fuller frame (the IG 4:5 version is a crop of
+  // the same design), so it is the one previewed.
+  const preview = items.find((i) => i.platform === "tiktok") || items[0];
+  const dir = join(OUT_DIR, preview.deckId, preview.platform);
+  const files = preview.slideFiles.map((f) => ({ name: f, bytes: readFileSync(join(dir, f)) }));
+
+  // Telegram albums cap at 10; decks are 6–9 slides.
+  await tg.sendMediaGroup(CHAT, files.slice(0, 10), `${preview.deckId} → ${preview.platform} preview`);
 
   // Buttons go in a SECOND message: sendMediaGroup does not accept
   // reply_markup. See telegram.mjs.
-  const sent = await tg.sendMessage(CHAT, cardText(item) + (truncated ? "\n\n⚠️ more than 10 slides — only the first 10 were previewed" : ""), {
+  const sent = await tg.sendMessage(CHAT, deckCard(items) + (files.length > 10 ? "\n\n⚠️ more than 10 slides — only the first 10 were previewed" : ""), {
     parse_mode: "HTML",
-    reply_markup: tg.keyboard([[
-      tg.button("✅ Approve", `a|${item.id}`),
-      tg.button("❌ Reject", `r|${item.id}`),
-      tg.button("✏️ Changes", `c|${item.id}`),
-    ]]),
+    reply_markup: deckButtons(preview.deckId, items.map((i) => i.platform)),
   });
-
   return sent.message_id;
 }
 
+let delivering = false;
 async function deliverPending() {
-  const q = load();
-  const pending = byStatus(q, "pending");
-  if (!pending.length) return;
-  console.log(`  → delivering ${pending.length} pending item(s)`);
-  for (const item of pending) {
-    try {
-      const messageId = await deliver(item);
-      item.deliveredMessageId = messageId;
-      transition(item, "awaiting", { messageId });
-      // Persist after EACH delivery, not once at the end: a crash halfway
-      // through a batch must not re-deliver the ones already sent.
-      save(q);
-      console.log(`    ⏳ ${item.id}`);
-    } catch (err) {
-      console.error(`    ✗ ${item.id}: ${tg.redact(err.message)}`);
-      await tg.sendMessage(CHAT, `⚠️ Could not deliver <code>${esc(item.id)}</code>\n\n${esc(tg.redact(err.message))}`, { parse_mode: "HTML" })
-        .catch(() => {});
+  if (delivering) return;
+  delivering = true;
+  try {
+    const pending = byStatus(load(), "pending");
+    if (!pending.length) return;
+    const decks = new Map();
+    for (const it of pending) decks.set(it.deckId, [...(decks.get(it.deckId) || []), it]);
+    console.log(`  → delivering ${decks.size} deck(s)`);
+
+    for (const [deckId, items] of decks) {
+      try {
+        const messageId = await deliverDeck(items);
+        // Persist after EACH deck, not once at the end: a crash halfway
+        // through a batch must not re-deliver the ones already sent.
+        mutate((q) => {
+          for (const { id } of items) {
+            const it = find(q, id);
+            if (it?.status === "pending") { it.deliveredMessageId = messageId; transition(it, "awaiting", { messageId }); }
+          }
+        });
+        console.log(`    ⏳ ${deckId}`);
+      } catch (err) {
+        console.error(`    ✗ ${deckId}: ${tg.redact(err.message)}`);
+        await say(`⚠️ Could not deliver <code>${esc(deckId)}</code> — it stays pending; /pending retries.\n\n${esc(tg.redact(err.message))}`);
+      }
+      // Albums are the heaviest thing a bot sends; spacing them keeps a
+      // batch under Telegram's per-chat flood limit in the first place.
+      await new Promise((r) => setTimeout(r, 1500));
     }
+  } finally {
+    delivering = false;
   }
 }
 
 /* ── feedback capture ─────────────────────────────────────────────────────
  * The reason a post was killed is the only signal in this whole loop that
  * says WHY something did not work, as opposed to that it didn't. It goes into
- * a file the next batch's hook library is written from, not just into the
- * queue JSON where nobody would read it.
+ * a file the next batch's writer reads, not just into the queue JSON where
+ * nobody would read it.
  * ------------------------------------------------------------------------ */
-function recordFeedback(item, kind, reason) {
+function recordFeedback(item, kind, reason, subject = item.id) {
   if (!existsSync(FEEDBACK_FILE)) {
     writeFileSync(FEEDBACK_FILE, `# Approval feedback
 
 Written by the Telegram approval bot. One row per rejection or change request.
 
-**This is the input to the next batch's HOOKS.md.** A hook that gets rejected
-three times for the same reason is a hook to delete, not to rewrite again.
+**This is the input to the next batch's HOOKS.md — and scripts/write-decks.mjs
+reads it on every run.** A hook that gets rejected three times for the same
+reason is a hook to delete, not to rewrite again.
 
 | When | Item | Angle | Hook | CTA | Decision | Reason |
 |---|---|---|---|---|---|---|
 `, "utf8");
   }
-  const row = `| ${new Date().toISOString().slice(0, 16).replace("T", " ")} | \`${item.id}\` | ${item.angle} | \`${item.hookId}\` | \`${item.ctaId || "—"}\` | ${kind} | ${String(reason).replace(/\|/g, "\\|").replace(/\n/g, " ")} |\n`;
+  const row = `| ${new Date().toISOString().slice(0, 16).replace("T", " ")} | \`${subject}\` | ${item.angle} | \`${item.hookId}\` | \`${item.ctaId || "—"}\` | ${kind} | ${String(reason).replace(/\|/g, "\\|").replace(/\n/g, " ")} |\n`;
   appendFileSync(FEEDBACK_FILE, row, "utf8");
+}
+
+/* ── scheduling ───────────────────────────────────────────────────────────
+ * Approval and posting are separate moments: approve three decks over
+ * breakfast, and they go out at the slot times, never more than
+ * POSTS_PER_DAY per platform per day. All in the process's local time.
+ * ------------------------------------------------------------------------ */
+
+const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+function nextSlot(q, platform, now = new Date()) {
+  const { burst } = config.schedule;
+  // Everything that has or will occupy a posting slot on this platform.
+  const taken = q.items
+    .filter((i) => i.platform === platform && ["scheduled", "approved", "published", "publish_failed"].includes(i.status))
+    .map((i) => i.scheduledFor || i.postedAt)
+    .filter(Boolean)
+    .map((t) => new Date(t));
+
+  for (let d = 0; d < 90; d++) {
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + d);
+    const isBurst = burst && localDate(day) === burst.date;
+    const times = isBurst ? burst.times : config.schedule.times;
+    const perDay = isBurst ? burst.times.length : config.schedule.perDay;
+    const onDay = taken.filter((t) => sameDay(t, day));
+    if (onDay.length >= perDay) continue;
+    for (const t of times) {
+      const [h, m] = t.split(":").map(Number);
+      const slot = new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, m);
+      if (slot <= now) continue;
+      if (onDay.some((x) => x.getTime() === slot.getTime())) continue;
+      return slot;
+    }
+  }
+  return null;
 }
 
 /* ── publishing ───────────────────────────────────────────────────────── */
 
-async function runPublish(item) {
+/**
+ * Runs the publisher for one item. The network call happens OUTSIDE any
+ * queue mutation (see queue.mjs mutate()); only the result is written back.
+ */
+async function publishNow(id) {
+  const item = find(load(), id);
+  if (!item) return;
   const mode = config.publishers[item.platform] || "manual";
-  const publisher = getPublisher(mode);
 
-  let result;
+  let result = null, error = null, screenshot = null;
   try {
-    result = await publisher.publish(item);
+    result = await getPublisher(mode).publish(item);
+    screenshot = result?.screenshot || null;
   } catch (err) {
-    // LOUD. An approved post that silently never published is the failure
-    // mode this whole gate exists to prevent, so it gets its own status, its
-    // own Telegram message with the real reason, and a Retry button.
-    transition(item, "publish_failed", { publisher: mode, error: tg.redact(err.message) });
-    item.reason = tg.redact(err.message);
-    await tg.sendMessage(CHAT,
-      `🔥 <b>PUBLISH FAILED</b> — <code>${esc(item.id)}</code>\n\n` +
-      `Publisher: <code>${esc(mode)}</code>\n\n` +
-      `${esc(tg.redact(err.message))}\n\n` +
-      `It is approved but <b>not posted</b>. Nothing will retry on its own.`,
-      { parse_mode: "HTML", reply_markup: tg.keyboard([[tg.button("🔁 Retry publish", `p|${item.id}`)]]) }
-    ).catch(() => {});
-    return false;
+    error = tg.redact(err.message);
+    screenshot = err.screenshot || null;
   }
 
-  if (result.published) {
-    item.postId = result.postId;
-    item.postUrl = result.url;
-    item.postedAt = new Date().toISOString();
-    transition(item, "published", { publisher: mode, postId: result.postId });
-    await tg.sendMessage(CHAT,
-      `🚀 <b>Published</b> — <code>${esc(item.id)}</code>\n${esc(result.note)}` +
-      (result.url ? `\n${esc(result.url)}` : ""),
-      { parse_mode: "HTML" }).catch(() => {});
-  } else {
-    transition(item, "approved", { publisher: mode, note: result.note });
-    await tg.sendMessage(CHAT,
-      `✅ <b>Approved</b> — <code>${esc(item.id)}</code>\n\n` +
-      `<b>Post this one by hand.</b> ${esc(result.note)}\n\n` +
-      `Bio link: ${esc(item.trackingUrl || "(not configured)")}\n\n` +
-      `When it's live: <code>/posted ${esc(item.id)} &lt;url&gt;</code>`,
-      { parse_mode: "HTML" }).catch(() => {});
+  const it = mutate((q) => {
+    const x = find(q, id);
+    if (!x) return null;
+    if (error) {
+      // LOUD. An approved post that silently never published is the failure
+      // mode this whole gate exists to prevent, so it gets its own status, its
+      // own Telegram message with the real reason, and a Retry button.
+      transition(x, "publish_failed", { publisher: mode, error });
+      x.reason = error;
+    } else if (result.published) {
+      x.postId = result.postId;
+      x.postUrl = result.url;
+      x.postedAt = new Date().toISOString();
+      transition(x, "published", { publisher: mode, postId: result.postId });
+    } else {
+      if (result.handedOff) x.handedOffAt = new Date().toISOString();
+      transition(x, "approved", { publisher: mode, note: result.note });
+    }
+    return x;
+  });
+  if (!it) return;
+  // The telegram publisher already sent the slides, steps and caption.
+  if (!error && result.handedOff) return;
+
+  // The browser bot's view of the page — on failure, what went wrong; on a
+  // dry run, what it would have posted.
+  if (screenshot && existsSync(screenshot)) {
+    await tg.sendPhoto(CHAT, readFileSync(screenshot), `${error ? "🔥" : "🧪"} ${id} — what the posting browser saw`)
+      .catch((e) => console.error(`  ✗ screenshot send failed: ${tg.redact(e.message)}`));
   }
-  return true;
+
+  if (error) {
+    await say(
+      `🔥 <b>PUBLISH FAILED</b> — <code>${esc(id)}</code>\n\n` +
+      `Publisher: <code>${esc(mode)}</code>\n\n${esc(error)}\n\n` +
+      `It is approved but <b>not posted</b>. Nothing will retry on its own.`,
+      { reply_markup: tg.keyboard([[tg.button("🔁 Retry publish", `p|${id}`)]]) });
+  } else if (result.published) {
+    await say(`🚀 <b>Published</b> — <code>${esc(id)}</code>\n${esc(result.note)}${result.url ? `\n${esc(result.url)}` : ""}\n\nTRACKING.md row:\n<pre>${esc(trackingRow(it))}</pre>`);
+  } else {
+    await say(
+      `✅ <b>Ready to post</b> — <code>${esc(id)}</code>\n\n` +
+      `<b>Post this one by hand now.</b> ${esc(result.note)}\n\n` +
+      `Bio link: ${esc(it.trackingUrl || "(not configured)")}\n\n` +
+      `When it's live: <code>/posted ${esc(id)} &lt;url&gt;</code>`);
+  }
+}
+
+/**
+ * Approve a set of items: into a posting slot if POST_TIMES is set,
+ * otherwise straight to the publisher.
+ */
+async function approve(ids) {
+  const immediate = !config.schedule.times.length;
+  const outcome = mutate((q) => ids.map((id) => {
+    const it = find(q, id);
+    if (!it || !["awaiting", "pending"].includes(it.status)) return { id, skipped: it?.status || "missing" };
+    if (immediate) { transition(it, "approved", { by: "telegram" }); return { id }; }
+    const slot = nextSlot(q, it.platform);
+    if (!slot) { transition(it, "approved", { by: "telegram", note: "no free slot in 90 days — publishing now" }); return { id }; }
+    it.scheduledFor = slot.toISOString();
+    transition(it, "scheduled", { by: "telegram", scheduledFor: it.scheduledFor });
+    return { id, scheduledFor: it.scheduledFor, platform: it.platform };
+  }));
+
+  const scheduled = outcome.filter((o) => o.scheduledFor);
+  if (scheduled.length) {
+    await say(`✅ <b>Approved</b>\n${scheduled.map((o) => `🗓 ${esc(label(o.platform))}: ${esc(when(o.scheduledFor))}`).join("\n")}`);
+  }
+  for (const o of outcome) {
+    if (o.skipped) await say(`<code>${esc(o.id)}</code> is already ${esc(o.skipped)} — left alone.`);
+    else if (!o.scheduledFor) await publishNow(o.id);
+  }
+}
+
+/* ── the tick: posting slots and the daily batch ──────────────────────── */
+
+let ticking = false;
+let lastIgCheck = 0;
+let lastIgWarnDay = null;
+async function tick() {
+  if (ticking) return;
+  ticking = true;
+  try {
+    // Due posts. Claim each (scheduled → approved) before publishing, so a
+    // slow publish can never be picked up twice by the next tick.
+    const now = Date.now();
+    const due = mutate((q) => q.items
+      .filter((i) => i.status === "scheduled" && Date.parse(i.scheduledFor) <= now)
+      .map((i) => { transition(i, "approved", { by: "schedule" }); return i.id; }));
+    for (const id of due) await publishNow(id);
+
+    // Instagram token upkeep, checked a few times a day (igtoken.mjs decides
+    // when a refresh is actually due). Warnings go to Telegram once a day.
+    if (Object.values(config.publishers).includes("instagram") && Date.now() - lastIgCheck > 6 * 3600_000) {
+      lastIgCheck = Date.now();
+      const { refreshed, warning } = await refreshIfDue();
+      if (refreshed) console.log("  ✓ Instagram token refreshed");
+      if (warning && localDate(new Date()) !== lastIgWarnDay) {
+        lastIgWarnDay = localDate(new Date());
+        await say(`⚠️ ${esc(warning)}`);
+      }
+    }
+
+    if (config.dailyRunAt && !dailyRunning) {
+      const d = new Date();
+      const today = localDate(d);
+      const hhmm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      if (hhmm >= config.dailyRunAt && readDaily().lastRunDate !== today) {
+        runDaily({ reason: `scheduled ${config.dailyRunAt}` }).catch((err) => console.error(`  ✗ daily: ${tg.redact(err.message)}`));
+      }
+    }
+  } catch (err) {
+    console.error(`  ✗ tick: ${tg.redact(err.message)}`);
+  } finally {
+    ticking = false;
+  }
+}
+
+const localDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+function readDaily() {
+  try { return JSON.parse(readFileSync(DAILY_FILE, "utf8")); } catch { return {}; }
+}
+function writeDaily(v) {
+  mkdirSync(STATE_DIR, { recursive: true });
+  writeFileSync(DAILY_FILE, JSON.stringify(v, null, 2), "utf8");
+}
+
+let dailyRunning = false;
+async function runDaily({ force = false, reason }) {
+  if (dailyRunning) { await say("A batch is already being generated."); return; }
+  dailyRunning = true;
+  // Marked at the START: a batch that fails is reported, not retried every
+  // tick — retrying a failing model call every 20s is how a bug spends money.
+  writeDaily({ ...readDaily(), lastRunDate: localDate(new Date()), startedAt: new Date().toISOString() });
+  try {
+    await say(`🛠 Generating today's decks <i>(${esc(reason)})</i>…`);
+    const { code, out } = await new Promise((resolve) => {
+      const p = spawn(process.execPath, [join(MARKETING_ROOT, "scripts", "daily.mjs"), ...(force ? ["--force"] : [])], { cwd: MARKETING_ROOT, env: process.env });
+      const chunks = [];
+      p.stdout.on("data", (b) => { chunks.push(String(b)); process.stdout.write(b); });
+      p.stderr.on("data", (b) => { chunks.push(String(b)); process.stderr.write(b); });
+      p.on("exit", (c) => resolve({ code: c, out: chunks.join("") }));
+    });
+
+    const line = out.split(/\r?\n/).reverse().find((l) => l.startsWith("DAILY_RESULT "));
+    let res = null;
+    try { res = line ? JSON.parse(line.slice("DAILY_RESULT ".length)) : null; } catch { /* below */ }
+    writeDaily({ ...readDaily(), finishedAt: new Date().toISOString(), ok: Boolean(res?.ok) });
+
+    if (!res?.ok) {
+      const tail = tg.redact(res?.error || out.trim().split(/\r?\n/).slice(-8).join("\n"));
+      await say(`🔥 <b>DAILY BATCH FAILED</b> (exit ${code})\n\n<pre>${esc(clip(tail, 3000))}</pre>\n\nFix it, then /generate to resume — finished steps are not redone.`);
+      return;
+    }
+
+    const parts = [`🗂 <b>${res.decks.length} deck(s) ready</b>: ${res.decks.map((d) => `<code>${esc(d)}</code>`).join(", ")}`];
+    for (const d of res.dropped || []) parts.push(`✗ dropped <code>${esc(d.slug)}</code> — failed validation twice: ${esc(clip(d.errors.join("; "), 400))}`);
+    for (const f of res.imageFailures || []) parts.push(`⚠️ ${esc(f.deckId)} slide ${esc(f.slide)}: no image (${esc(clip(f.error, 160))})`);
+    await say(parts.join("\n"));
+    await deliverPending();
+  } finally {
+    dailyRunning = false;
+  }
 }
 
 /* ── update handling ──────────────────────────────────────────────────── */
 
-// item id -> what we asked for, so a force_reply can be matched back.
+// What a force_reply is waiting for: the item ids a reason applies to.
 const awaitingReply = new Map();
 
-async function onCallback(cb) {
-  const [action, id] = String(cb.data || "").split("|");
-  const q = load();
-  const item = find(q, id);
+const deckItems = (q, deckId) => q.items.filter((i) => i.deckId === deckId);
 
+async function onCallback(cb) {
+  const parts = String(cb.data || "").split("|");
+  const action = parts[0];
+  const q = load();
+
+  // ── deck-level buttons (A / R / C) ──
+  if (["A", "R", "C"].includes(action)) {
+    const deckId = parts[1];
+    const open = deckItems(q, deckId).filter((i) => ["awaiting", "pending"].includes(i.status));
+    if (!open.length) {
+      const states = deckItems(q, deckId).map((i) => `${label(i.platform)} ${i.status}`).join(", ");
+      await tg.answerCallbackQuery(cb.id, states ? `Already decided: ${states}.` : "That deck is no longer in the queue.", true);
+      return;
+    }
+    if (cb.message) await tg.editMessageReplyMarkup(CHAT, cb.message.message_id, null);
+
+    if (action === "A") {
+      const platform = parts[2];
+      const chosen = platform === "*" ? open : open.filter((i) => i.platform === platform);
+      const others = open.filter((i) => !chosen.includes(i));
+      await tg.answerCallbackQuery(cb.id, "Approving…");
+      if (others.length) {
+        // "TikTok only" is a decision about the other platform too — it must
+        // not sit awaiting forever. Not written to FEEDBACK.md: it says
+        // nothing about the copy.
+        mutate((qq) => others.forEach((o) => {
+          const it = find(qq, o.id);
+          it.reason = `not approved for ${label(it.platform)} (approved ${label(platform)} only)`;
+          transition(it, "rejected", { by: "telegram", reason: it.reason });
+        }));
+      }
+      await approve(chosen.map((i) => i.id));
+      return;
+    }
+
+    const kind = action === "R" ? "rejected" : "changes_requested";
+    await tg.answerCallbackQuery(cb.id, action === "R" ? "Rejecting — send the reason." : "Send the changes.");
+    awaitingReply.set(CHAT, { ids: open.map((i) => i.id), subject: deckId, kind });
+    await say(
+      `${action === "R" ? "❌" : "✏️"} <code>${esc(deckId)}</code> — reply to this message with ${action === "R" ? "why it was rejected" : "what to change"}.\n\n` +
+      `<i>It goes into FEEDBACK.md and tomorrow's writer reads it, so be specific — "hook is weak" helps nobody.</i>`,
+      { reply_markup: { force_reply: true, selective: true } });
+    return;
+  }
+
+  // ── per-item buttons: cards delivered before deck-level approval existed,
+  // the Retry button on a failed publish, and "I posted it" on a hand-off ──
+  const id = parts[1];
+  const item = find(q, id);
   if (!item) { await tg.answerCallbackQuery(cb.id, "That item is no longer in the queue.", true); return; }
+
+  if (action === "P") {
+    if (item.status !== "approved") { await tg.answerCallbackQuery(cb.id, `Already ${item.status}.`, true); return; }
+    await tg.answerCallbackQuery(cb.id, "Recorded 🚀");
+    if (cb.message) await tg.editMessageReplyMarkup(CHAT, cb.message.message_id, null);
+    const it = mutate((qq) => {
+      const x = find(qq, id);
+      x.postedAt = new Date().toISOString();
+      transition(x, "published", { by: "telegram I-posted-it" });
+      return x;
+    });
+    await say(`🚀 <code>${esc(id)}</code> recorded as posted.\n\nAdd the post link for tracking: <code>/posted ${esc(id)} &lt;url&gt;</code>\n\nTRACKING.md row:\n<pre>${esc(trackingRow(it))}</pre>`);
+    return;
+  }
+
+  if (action === "p") {
+    // Retry is only for a failed publish. Anything else — especially
+    // published — must never be re-sent to a publisher by a stale button.
+    if (item.status !== "publish_failed") { await tg.answerCallbackQuery(cb.id, `Already ${item.status}.`, true); return; }
+    await tg.answerCallbackQuery(cb.id, "Retrying…");
+    if (cb.message) await tg.editMessageReplyMarkup(CHAT, cb.message.message_id, null);
+    mutate((qq) => transition(find(qq, id), "approved", { by: "telegram retry" }));
+    await publishNow(id);
+    return;
+  }
 
   // Guard against a second press on a card that was already decided — the
   // buttons are removed on decision, but a cached client can still fire.
-  if (action !== "p" && !["awaiting", "pending"].includes(item.status)) {
+  if (!["awaiting", "pending"].includes(item.status)) {
     await tg.answerCallbackQuery(cb.id, `Already ${item.status}.`, true);
     return;
   }
 
-  if (action === "a" || action === "p") {
+  if (action === "a") {
     await tg.answerCallbackQuery(cb.id, "Approving…");
     if (cb.message) await tg.editMessageReplyMarkup(CHAT, cb.message.message_id, null);
-    transition(item, "approved", { by: "telegram" });
-    save(q);
-    await runPublish(item);
-    save(q);
+    await approve([id]);
     return;
   }
 
@@ -252,11 +583,11 @@ async function onCallback(cb) {
     const kind = action === "r" ? "rejected" : "changes_requested";
     await tg.answerCallbackQuery(cb.id, action === "r" ? "Rejecting — send the reason." : "Send the changes.");
     if (cb.message) await tg.editMessageReplyMarkup(CHAT, cb.message.message_id, null);
-    awaitingReply.set(CHAT, { id, kind });
-    await tg.sendMessage(CHAT,
+    awaitingReply.set(CHAT, { ids: [id], subject: id, kind });
+    await say(
       `${action === "r" ? "❌" : "✏️"} <code>${esc(id)}</code> — reply to this message with ${action === "r" ? "why it was rejected" : "what to change"}.\n\n` +
-      `<i>It goes into marketing/FEEDBACK.md and shapes the next batch, so be specific — "hook is weak" helps nobody.</i>`,
-      { parse_mode: "HTML", reply_markup: { force_reply: true, selective: true } });
+      `<i>It goes into FEEDBACK.md and tomorrow's writer reads it, so be specific — "hook is weak" helps nobody.</i>`,
+      { reply_markup: { force_reply: true, selective: true } });
     return;
   }
 
@@ -269,20 +600,27 @@ async function onMessage(msg) {
   // A pending reason/changes reply takes priority over command parsing.
   const pendingReply = awaitingReply.get(CHAT);
   if (pendingReply && text && !text.startsWith("/")) {
-    const q = load();
-    const item = find(q, pendingReply.id);
     awaitingReply.delete(CHAT);
-    if (!item) { await tg.sendMessage(CHAT, "That item vanished from the queue."); return; }
-    item.reason = text.slice(0, 500);
-    transition(item, pendingReply.kind, { reason: item.reason });
-    save(q);
-    recordFeedback(item, pendingReply.kind === "rejected" ? "reject" : "changes", item.reason);
-    await tg.sendMessage(CHAT, `Logged against <code>${esc(item.id)}</code> and appended to FEEDBACK.md.`, { parse_mode: "HTML" });
+    const reason = text.slice(0, 500);
+    const first = mutate((q) => {
+      let firstItem = null;
+      for (const id of pendingReply.ids) {
+        const it = find(q, id);
+        if (!it || !["awaiting", "pending"].includes(it.status)) continue;
+        it.reason = reason;
+        transition(it, pendingReply.kind, { reason });
+        firstItem ??= it;
+      }
+      return firstItem;
+    });
+    if (!first) { await say("That deck was already decided — nothing changed."); return; }
+    recordFeedback(first, pendingReply.kind === "rejected" ? "reject" : "changes", reason, pendingReply.subject);
+    await say(`Logged against <code>${esc(pendingReply.subject)}</code> and appended to FEEDBACK.md.`);
     return;
   }
 
   if (text === "/queue" || text === "/status") {
-    await tg.sendMessage(CHAT, `<pre>${esc(summarize(load()))}</pre>`, { parse_mode: "HTML" });
+    await say(`<pre>${esc(clip(summarize(load()), 3800))}</pre>`);
     return;
   }
 
@@ -291,19 +629,89 @@ async function onMessage(msg) {
     return;
   }
 
+  if (text === "/generate" || text === "/generate more") {
+    // "/generate" runs (or finishes) today's batch; "/generate more" writes an
+    // extra batch on top of it.
+    runDaily({ force: text.endsWith("more"), reason: text.endsWith("more") ? "an extra batch, on request" : "on request" })
+      .catch((err) => say(`🔥 ${esc(tg.redact(err.message))}`));
+    return;
+  }
+
+  if (text === "/schedule") {
+    const s = byStatus(load(), "scheduled").sort((a, b) => Date.parse(a.scheduledFor) - Date.parse(b.scheduledFor));
+    await say(s.length
+      ? `🗓 <b>Scheduled</b>\n${s.map((i) => `${esc(when(i.scheduledFor))} · ${esc(label(i.platform))} · <code>${esc(i.deckId)}</code>`).join("\n")}`
+      : "Nothing scheduled.");
+    return;
+  }
+
   if (text.startsWith("/posted")) {
     const [, id, url] = text.split(/\s+/);
-    const q = load();
-    const item = find(q, id);
-    if (!item) { await tg.sendMessage(CHAT, `No queue item ${id ? `\`${id}\`` : "given"}.`); return; }
-    item.postUrl = url || null;
-    item.postedAt = new Date().toISOString();
-    transition(item, "published", { by: "manual /posted", url: url || null });
-    save(q);
-    await tg.sendMessage(CHAT,
-      `🚀 Recorded <code>${esc(item.id)}</code> as posted.\n\n` +
-      `Add the TRACKING.md row:\n<pre>${esc(trackingRow(item))}</pre>`,
-      { parse_mode: "HTML" });
+    const it = mutate((q) => {
+      const x = find(q, id);
+      if (!x) return null;
+      x.postUrl = url || x.postUrl || null;
+      // Adding a link to something already recorded keeps its original time.
+      if (x.status !== "published") {
+        x.postedAt = new Date().toISOString();
+        transition(x, "published", { by: "manual /posted", url: url || null });
+      } else {
+        (x.history ||= []).push({ status: "published", at: new Date().toISOString(), note: "post URL added", url: url || null });
+      }
+      return x;
+    });
+    if (!it) { await say(`No queue item ${id ? `<code>${esc(id)}</code>` : "given"}.`); return; }
+    await say(`🚀 Recorded <code>${esc(it.id)}</code> as posted.\n\nAdd the TRACKING.md row:\n<pre>${esc(trackingRow(it))}</pre>`);
+    return;
+  }
+
+  if (text === "/tiktoklogin") {
+    // Runs in the background so the bot keeps answering while you scan.
+    await say("Opening TikTok's QR login on the posting browser…");
+    import("../lib/browser.mjs")
+      .then(({ tiktokQrLogin }) => tiktokQrLogin(async (png, n) => {
+        await tg.sendPhoto(CHAT, png, n === 1
+          ? "Scan this with the TikTok app, logged in as myargusai: tap Search, then the scan icon at the right of the search bar, and confirm on the phone."
+          : "That code expired — here's a fresh one.");
+      }))
+      .then((r) => say(r === "already" ? "✓ TikTok is already logged in on the posting browser — nothing to do."
+        : r ? "✓ <b>TikTok logged in.</b> Automatic TikTok posting works again. If a post failed while logged out, press its 🔁 Retry."
+        : "✗ No scan within 5 minutes. Send /tiktoklogin to try again."))
+      .catch((err) => say(`🔥 TikTok login failed: ${esc(tg.redact(err.message))}`));
+    return;
+  }
+
+  if (text.startsWith("/instagram")) {
+    const arg = text.split(/\s+/)[1] || "";
+    if (!arg) {
+      await say([
+        `Instagram is <b>${esc(publishModeNote("instagram"))}</b>.`,
+        "",
+        "To make it automatic, send <code>/instagram YOUR_TOKEN</code> — the token from your Meta app (Instagram → API setup with Instagram login → Generate token). I check it with Instagram, save it, delete your message, and switch Instagram to automatic.",
+        "<code>/instagram off</code> goes back to sending you the post by hand.",
+      ].join("\n"));
+      return;
+    }
+    if (arg === "off") {
+      setPublisher("instagram", "telegram");
+      await say("Instagram is back to hand-offs: at each slot I'll send you the slides to post.");
+      return;
+    }
+    // The message carries a live token — remove it from the chat first.
+    await tg.deleteMessage(CHAT, msg.message_id);
+    if (!process.env.MARKETING_GCS_BUCKET || !process.env.MARKETING_GCS_KEY_B64) {
+      await say("🔥 Can't switch Instagram on: the slide bucket isn't configured (MARKETING_GCS_BUCKET / MARKETING_GCS_KEY_B64 in bot/.env). Instagram fetches images by URL, so it needs them.");
+      return;
+    }
+    try {
+      const { verifyToken, setToken } = await import("./igtoken.mjs");
+      const acct = await verifyToken(arg);
+      setToken({ token: arg, userId: acct.userId, username: acct.username });
+      setPublisher("instagram", "instagram");
+      await say(`✓ <b>Instagram connected</b> as @${esc(acct.username || acct.userId)}${acct.accountType ? ` (${esc(acct.accountType.toLowerCase())} account)` : ""}. I deleted your message.\n\nApproved decks now post to Instagram automatically at their slots. The token renews itself every week.`);
+    } catch (err) {
+      await say(`✗ ${esc(tg.redact(err.message))}\n\nI deleted your message; nothing was changed. Instagram stays on hand-offs.`);
+    }
     return;
   }
 
@@ -311,11 +719,16 @@ async function onMessage(msg) {
     await tg.sendMessage(CHAT, [
       "Argus marketing approval bot.",
       "",
+      "/generate — write, render and deliver today's decks now",
+      "/generate more — an extra batch on top of today's",
+      "/schedule — what's going out, and when",
       "/queue — everything and its status",
       "/pending — deliver anything not yet sent",
       "/posted <id> <url> — record a manually posted item",
+      "/tiktoklogin — log TikTok in again (QR code to scan)",
+      "/instagram <token> — make Instagram automatic",
       "",
-      "Approve / Reject / Changes are the buttons on each card.",
+      "Approve / Reject / Changes are the buttons on each deck.",
     ].join("\n"));
   }
 }
@@ -324,6 +737,27 @@ async function onMessage(msg) {
 function trackingRow(item) {
   const d = (item.postedAt || "").slice(0, 10);
   return `| | ${d} | ${item.deckId} | ${item.platform === "tiktok" ? "TT" : "IG"} | ${item.angle} | ${item.hookId} | ${item.ctaId || ""} | carousel | | | | | | | | | | ${item.trackingUrl || ""} |`;
+}
+
+/**
+ * An item claimed for publishing (status approved, no publisher result yet)
+ * when the process died. It may or may not have reached the platform, so it
+ * is NOT silently retried — that could double-post — and NOT left as
+ * "approved", which would look finished. It becomes a loud publish_failed
+ * with a Retry button, for a human to check the account first.
+ */
+async function recoverInterrupted() {
+  const stuck = mutate((q) => q.items
+    .filter((i) => i.status === "approved" && !("publisher" in (i.history?.at(-1) || {})))
+    .map((i) => {
+      i.reason = "the bot stopped while this was being published — check the account before retrying, it may already be live";
+      transition(i, "publish_failed", { error: i.reason });
+      return i.id;
+    }));
+  for (const id of stuck) {
+    await say(`🔥 <b>INTERRUPTED PUBLISH</b> — <code>${esc(id)}</code>\n\nThe bot stopped mid-publish. <b>Check the account first</b> — it may already be live. Retry only if it isn't.`,
+      { reply_markup: tg.keyboard([[tg.button("🔁 Retry publish", `p|${id}`)]]) });
+  }
 }
 
 /* ── main loop ────────────────────────────────────────────────────────── */
@@ -338,9 +772,30 @@ async function main() {
   console.log(`     authorised chat ${CHAT}`);
   console.log(`     ${describeMode("tiktok", config.publishers.tiktok)}`);
   console.log(`     ${describeMode("instagram", config.publishers.instagram)}`);
+  console.log(`     posting slots   ${config.schedule.times.length ? `${config.schedule.times.join(", ")} · ${config.schedule.perDay}/day per platform` : "none — publish on approval"}`);
+  if (config.schedule.burst) console.log(`     burst day       ${config.schedule.burst.date}: ${config.schedule.burst.times.length} slots per platform (${config.schedule.burst.times[0]}–${config.schedule.burst.times.at(-1)})`);
+  console.log(`     daily batch     ${config.dailyRunAt ? `at ${config.dailyRunAt}` : "off (use /generate)"}`);
+  console.log(`     local time      ${new Date().toString()}`);
   console.log(`     polling (no public endpoint, nothing inbound)\n`);
 
+  // Upload-Post connection check: a disconnected account is one warning now,
+  // not a PUBLISH FAILED at every slot later.
+  const viaUploadPost = Object.entries(config.publishers).filter(([, m]) => m === "uploadpost").map(([p]) => p);
+  if (viaUploadPost.length) {
+    const { checkConnection } = await import("./publishers/uploadpost.mjs");
+    const c = await checkConnection(viaUploadPost);
+    for (const [p, name] of Object.entries(c.connected)) console.log(`     upload-post     ${p} connected as ${name}`);
+    if (!c.ok) {
+      const why = c.error || `${c.missing.join(" and ")} not connected to Upload-Post profile "${config.uploadpost.user}"`;
+      console.warn(`  ⚠️ upload-post: ${why}`);
+      await say(`⚠️ <b>Upload-Post isn't ready</b>: ${esc(why)}.\n\nPosts will fail at their slots until it's fixed — check with <code>node scripts/check-uploadpost.mjs</code>.`);
+    }
+  }
+
+  await recoverInterrupted();
   await deliverPending();
+  await tick();
+  setInterval(() => { tick(); }, TICK_MS).unref?.();
 
   while (running) {
     let updates;

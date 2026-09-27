@@ -22,13 +22,15 @@ import { QUEUE_FILE, STATE_DIR } from "./config.mjs";
 /**
  * pending           created, not yet sent to Telegram
  * awaiting          delivered, buttons live, waiting on a decision
- * approved          approved, publish not yet attempted
+ * scheduled         approved, waiting for its posting slot (item.scheduledFor)
+ * approved          approved; either publishing now, or handed off to be
+ *                   posted by hand (manual publisher)
  * published         publisher reported success
  * publish_failed    approved but the publisher errored — LOUD, retriable
  * rejected          killed, with a reason
  * changes_requested sent back, with notes
  */
-export const STATUSES = ["pending", "awaiting", "approved", "published", "publish_failed", "rejected", "changes_requested"];
+export const STATUSES = ["pending", "awaiting", "scheduled", "approved", "published", "publish_failed", "rejected", "changes_requested"];
 
 function empty() { return { version: 1, items: [] }; }
 
@@ -51,6 +53,21 @@ export function save(q) {
   const tmp = `${QUEUE_FILE}.tmp`;
   writeFileSync(tmp, JSON.stringify(q, null, 2), "utf8");
   renameSync(tmp, QUEUE_FILE);
+}
+
+/**
+ * Load → change → save, with NO await in between. The bot has two things
+ * touching the queue concurrently (Telegram updates and the posting
+ * scheduler, each of which awaits network calls), and the pattern
+ * "load, await a publish, save" would let one overwrite the other's change
+ * with a stale copy. Every write goes through here instead, and anything
+ * slow happens between two mutate() calls, never inside one.
+ */
+export function mutate(fn) {
+  const q = load();
+  const result = fn(q);
+  save(q);
+  return result;
 }
 
 export function itemId(deckId, platform) { return `${deckId}:${platform}`; }
@@ -93,7 +110,7 @@ export function summarize(q) {
 
 export function statusIcon(s) {
   return {
-    pending: "·", awaiting: "⏳", approved: "✔", published: "🚀",
+    pending: "·", awaiting: "⏳", scheduled: "🗓", approved: "✔", published: "🚀",
     publish_failed: "🔥", rejected: "✖", changes_requested: "✎",
   }[s] || "?";
 }

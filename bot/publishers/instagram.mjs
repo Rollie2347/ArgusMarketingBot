@@ -1,111 +1,159 @@
 /**
- * Instagram carousel publishing via the Instagram Graph API.
+ * Instagram carousel publishing — free, direct, via the Instagram API with
+ * Instagram Login (graph.instagram.com). No Facebook Page, no Meta App Review:
+ * a Meta app in development mode can publish to accounts that hold a role on
+ * it, which is exactly one account here — ours.
  *
- * ⚠️ UNVERIFIED. This has never been executed against the real API, because
- * the prerequisites do not exist yet (no IG Business account, no linked
- * Facebook Page, no Meta app, no token). It is written from the documented
- * flow and is DEFAULT OFF. Run the first one with DRY_RUN=1.
+ * ⚠️ UNVERIFIED against the live API until the first real post — written from
+ * developers.facebook.com/docs/instagram-platform/content-publishing (read
+ * 2026-09-26) and tested against a local fake. First run with DRY_RUN=1.
  *
- * The documented flow, three steps:
- *   1. POST /{ig-user-id}/media  per slide, is_carousel_item=true  -> child ids
- *   2. POST /{ig-user-id}/media  media_type=CAROUSEL, children=[...] -> parent id
- *   3. POST /{ig-user-id}/media_publish  creation_id=<parent>      -> post id
+ * Flow:
+ *   0. upload the JPEG slides to the public bucket (lib/gcs.mjs) — Instagram
+ *      takes image URLs only, and JPEG only
+ *   1. POST /{ig-user-id}/media  image_url, is_carousel_item=true   per slide
+ *   2. POST /{ig-user-id}/media  media_type=CAROUSEL, children, caption
+ *   3. GET  /{container}?fields=status_code  until FINISHED
+ *   4. POST /{ig-user-id}/media_publish  creation_id
+ *   5. GET  /{media-id}?fields=permalink
  *
- * Two constraints that bite:
- *   - Meta FETCHES image_url server-side. Local files cannot be uploaded here,
- *     so the PNGs must already be on a public HTTPS host. IG_PUBLIC_ASSET_BASE
- *     is that host, and the URL is built as
- *     <base>/<deckId>/<platform>/<NN>.png
- *   - Carousel children are cropped to match the FIRST image's aspect ratio.
- *     Every slide the generator emits for a platform is identical in size, so
- *     this is satisfied by construction — but it is why you must never mix a
- *     tiktok/ 9:16 slide into an instagram/ 4:5 carousel.
+ * The token goes in an Authorization header, never a URL, and every error
+ * passes through scrubToken(). It is refreshed by the bot (igtoken.mjs).
  *
- * Rate limit: 100 API-published posts per rolling 24h. A carousel counts as
- * one. Irrelevant at our volume, noted so nobody re-derives it.
+ * Instagram has no idempotency key, so a retry after a publish whose reply
+ * was lost could double-post. Before publishing, this checks the account's
+ * last few posts for the same caption within the last hour and, if found,
+ * reports THAT post instead of posting again.
+ *
+ * Limits: 100 API posts / 24h (a carousel is one), 10 slides per carousel,
+ * every slide cropped to the first one's aspect ratio (ours are all 4:5).
  */
 
-import { config } from "../config.mjs";
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { config, OUT_DIR } from "../config.mjs";
+import { currentToken, currentUserId, scrubToken } from "../igtoken.mjs";
+import { uploadPublic, randomSegment } from "../../lib/gcs.mjs";
 
 export const name = "instagram";
 
+const GRAPH = process.env.IG_GRAPH_BASE || "https://graph.instagram.com";
 const DRY_RUN = process.env.DRY_RUN === "1";
+const POLL_MS = parseInt(process.env.IG_POLL_MS || "3000", 10);
 
-function graph(path) {
-  return `https://graph.facebook.com/${config.instagram.graphVersion}/${path}`;
-}
+const api = (path) => `${GRAPH}/${config.instagram.graphVersion}/${path}`;
 
-/**
- * The access token must never reach a log. It is sent as a form field rather
- * than a query parameter so it does not end up in any URL string that an error
- * or a stack trace could echo.
- */
-async function post(path, params) {
-  const body = new URLSearchParams({ ...params, access_token: config.instagram.accessToken });
+async function call(method, path, params = null) {
+  const token = currentToken();
+  if (!token) throw new Error("no Instagram access token — set IG_ACCESS_TOKEN (see bot/.env.example)");
   let res, text;
   try {
-    res = await fetch(graph(path), {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body,
+    const url = method === "GET" && params ? `${api(path)}?${new URLSearchParams(params)}` : api(path);
+    res = await fetch(url, {
+      method,
+      headers: {
+        authorization: `Bearer ${token}`,
+        ...(method === "POST" ? { "content-type": "application/x-www-form-urlencoded" } : {}),
+      },
+      body: method === "POST" ? new URLSearchParams(params || {}) : undefined,
       signal: AbortSignal.timeout(60_000),
     });
     text = await res.text();
   } catch (err) {
-    throw new Error(`instagram ${path} network failure: ${scrub(err.message)}`);
+    throw new Error(`instagram ${path}: network failure: ${scrubToken(err.message)}`);
   }
-
   let json;
   try { json = JSON.parse(text); } catch { throw new Error(`instagram ${path}: non-JSON reply (HTTP ${res.status})`); }
-  if (json.error) throw new Error(`instagram ${path}: ${scrub(json.error.message)} (code ${json.error.code}${json.error.error_subcode ? `/${json.error.error_subcode}` : ""})`);
+  if (json.error) {
+    const e = json.error;
+    const hint = e.code === 190 ? " — the access token is invalid or expired; generate a new one and set IG_ACCESS_TOKEN" : "";
+    throw new Error(`instagram ${path}: ${scrubToken(e.message)} (code ${e.code}${e.error_subcode ? `/${e.error_subcode}` : ""})${hint}`);
+  }
   if (!res.ok) throw new Error(`instagram ${path}: HTTP ${res.status}`);
   return json;
 }
 
-function scrub(s) {
-  const t = String(s ?? "");
-  const tok = config.instagram.accessToken;
-  return tok ? t.split(tok).join("<IG_TOKEN_REDACTED>") : t;
+const fullCaption = (item) => `${item.caption}\n\n${item.hashtags.join(" ")}`.trim();
+
+async function waitFinished(containerId) {
+  const until = Date.now() + 5 * 60_000;
+  let status = null;
+  while (Date.now() < until) {
+    ({ status_code: status } = await call("GET", containerId, { fields: "status_code" }));
+    if (status === "FINISHED" || status === "PUBLISHED") return;
+    if (status === "ERROR" || status === "EXPIRED") {
+      throw new Error(`instagram container ${containerId} is ${status} — usually an image Instagram could not fetch or accept`);
+    }
+    await new Promise((r) => setTimeout(r, POLL_MS));
+  }
+  throw new Error(`instagram container ${containerId} still ${status} after 5 min`);
+}
+
+/** Already posted within the hour with this exact caption? (lost-reply guard) */
+async function findRecentDuplicate(userId, caption) {
+  try {
+    const { data = [] } = await call("GET", `${userId}/media`, { fields: "id,caption,permalink,timestamp", limit: "5" });
+    const hourAgo = Date.now() - 3600_000;
+    return data.find((m) => m.caption?.trim() === caption.trim() && Date.parse(m.timestamp) >= hourAgo) || null;
+  } catch {
+    return null; // the guard is best-effort; never block a post on it
+  }
 }
 
 export async function publish(item) {
-  const { userId, publicAssetBase } = config.instagram;
-  const base = publicAssetBase.replace(/\/+$/, "");
-  const imageUrls = item.slideFiles.map((f) => `${base}/${item.deckId}/${item.platform}/${f}`);
+  // From the env, or stored by the /instagram Telegram command.
+  const userId = currentUserId();
+  if (!userId) throw new Error("no Instagram account set up — send /instagram <token> to the bot (see bot/README.md)");
+  const files = item.jpgFiles || [];
+  if (!files.length || files.length !== item.slideFiles.length) {
+    throw new Error(`${item.id} has no JPEG slides (Instagram accepts JPEG only). Re-render with scripts/make-slideshow.mjs (not --fallback), then re-enqueue.`);
+  }
+  if (files.length > 10) throw new Error(`${item.id} has ${files.length} slides; Instagram carousels take at most 10`);
+  const dir = join(OUT_DIR, item.deckId, item.platform);
+  for (const f of files) if (!existsSync(join(dir, f))) throw new Error(`missing slide ${join(item.deckId, item.platform, f)}`);
 
-  const fullCaption = `${item.caption}\n\n${item.hashtags.join(" ")}`;
+  const caption = fullCaption(item);
+  if (caption.length > 2200) throw new Error(`caption is ${caption.length} chars; Instagram's limit is 2200`);
 
   if (DRY_RUN) {
     return {
-      published: false,
-      postId: null,
-      url: null,
-      note: `DRY_RUN — would publish ${imageUrls.length} slides as a carousel to IG user ${userId}.\n` +
-            `First image: ${imageUrls[0]}\nCaption length: ${fullCaption.length} chars`,
+      published: false, postId: null, url: null,
+      note: `DRY_RUN — would upload ${files.length} JPEGs to gs://${process.env.MARKETING_GCS_BUCKET || "(MARKETING_GCS_BUCKET unset)"} and publish a carousel to IG user ${userId}. Caption ${caption.length} chars.`,
     };
   }
 
-  // 1. child containers
+  const dup = await findRecentDuplicate(userId, caption);
+  if (dup) {
+    return { published: true, postId: dup.id, url: dup.permalink || null, note: "Already on Instagram (same caption, posted within the hour) — recorded it rather than posting twice." };
+  }
+
+  // 0. host the slides
+  const prefix = `ig/${item.deckId}/${randomSegment()}`;
+  const urls = [];
+  for (const f of files) urls.push(await uploadPublic(readFileSync(join(dir, f)), `${prefix}/${f}`));
+
+  // 1. one container per slide
   const children = [];
-  for (const image_url of imageUrls) {
-    const child = await post(`${userId}/media`, { image_url, is_carousel_item: "true" });
+  for (const image_url of urls) {
+    const child = await call("POST", `${userId}/media`, { image_url, is_carousel_item: "true" });
     children.push(child.id);
   }
 
-  // 2. parent container
-  const parent = await post(`${userId}/media`, {
-    media_type: "CAROUSEL",
-    children: children.join(","),
-    caption: fullCaption,
-  });
+  // 2–3. the carousel container, once Instagram has fetched everything
+  const parent = await call("POST", `${userId}/media`, { media_type: "CAROUSEL", children: children.join(","), caption });
+  await waitFinished(parent.id);
 
-  // 3. publish
-  const published = await post(`${userId}/media_publish`, { creation_id: parent.id });
+  // 4. publish
+  const published = await call("POST", `${userId}/media_publish`, { creation_id: parent.id });
+
+  // 5. the permalink, for TRACKING.md — best-effort; the post is already live
+  let permalink = null;
+  try { ({ permalink = null } = await call("GET", published.id, { fields: "permalink" })); } catch { /* keep going */ }
 
   return {
     published: true,
     postId: published.id,
-    url: null, // media_publish returns an id, not a permalink; fetch permalink separately if ever needed
-    note: `Published carousel (${children.length} slides), media id ${published.id}`,
+    url: permalink,
+    note: `Published carousel (${children.length} slides).${item.aiImages ? " Contains AI-generated photos — if Meta doesn't auto-label it, add the AI label in the app." : ""}`,
   };
 }

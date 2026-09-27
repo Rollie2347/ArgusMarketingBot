@@ -9,16 +9,48 @@ node scripts/make-slideshow.mjs             # render everything (~22s for 10 dec
 node scripts/make-slideshow.mjs 01-fridge-stare --safe   # one deck, with safe-zone guides drawn
 ```
 
-Then open `out/index.html` to review the whole batch, and send it for approval:
+**Daily, unattended** (what the bot does at `DAILY_RUN_AT`, or on `/generate`):
+
+```bash
+node scripts/daily.mjs     # write 3 decks (Gemini) → photos → render → queue; idempotent
+node bot/bot.mjs           # delivers them to Telegram, then posts approved ones at their slots
+```
+
+By hand, for the hand-written decks — open `out/index.html` to review the whole batch, then:
 
 ```bash
 node bot/enqueue.mjs                        # load the rendered batch into the approval queue
 node bot/bot.mjs                            # deliver to Telegram, wait for Approve/Reject/Changes
 ```
 
-Approved posts land as a ready-to-post bundle at `out/<deck>/_approved/<platform>.md`.
-**Nothing publishes automatically** — see `bot/README.md` for why (neither platform's API is
-reachable yet, and it's a prerequisites problem, not a code one).
+**Nothing publishes without an approval in Telegram.** What happens after approval, per platform
+(`bot/README.md` has the detail):
+
+| Platform | Status (2026-09-27) |
+|---|---|
+| **TikTok** | **Automatic, verified live.** `PUBLISH_TIKTOK=tiktokweb`: a browser bot on this PC posts each deck to TikTok's website as a slideshow video (the site can't make photo carousels). Logged out → the bot alerts; send `/tiktoklogin` in Telegram and scan the QR. |
+| **Instagram** | **⚠️ STILL MANUAL — NEEDS FIXING.** Hand-offs to Telegram (`telegram` publisher): the slides arrive at each slot and have to be posted by hand. See below. |
+
+## ⚠️ Open: Instagram automatic posting (TO FIX)
+
+Everything on our side is built and tested — `bot/publishers/instagram.mjs` (Instagram API with
+Instagram Login, free, allowed by Meta), the public slide bucket (`lib/gcs.mjs`,
+`argus-marketing-slides-470515` in `n8n-ai-agents-470515`), weekly token refresh
+(`bot/igtoken.mjs`) and the `/instagram <token>` Telegram command that switches it on. **What's
+missing is the token**, and getting it has been difficult (2026-09-26/27):
+
+- Meta's setup asked for "business certificates". That is business verification, which is only
+  required for apps serving OTHER people's accounts (Advanced Access). For our own account
+  (Standard Access, app left in development mode) it is not — skip "connect a business portfolio".
+- The account must be a Professional account (Creator is enough, free, no documents).
+- Steps: Instagram → switch `myargusai` to Creator → developers.facebook.com → Create app →
+  "Manage messaging & content on Instagram" → no business portfolio → Instagram use case →
+  "API setup with Instagram login" → Add account (or add as Instagram Tester and accept the invite
+  in the Instagram app) → Generate token → send `/instagram <token>` to the bot.
+
+Next step: find out which screen blocks it (a screenshot of it) and get past it. Fallbacks if Meta
+won't cooperate: a browser bot for instagram.com like the TikTok one (carousels work there, but
+it's against Instagram's terms), or Upload-Post (`bot/publishers/uploadpost.mjs`, paid).
 
 ## Files
 
@@ -32,7 +64,12 @@ reachable yet, and it's a prerequisites problem, not a code one).
 | `decks/*.json` | One file per slideshow. Schema in `decks/_SCHEMA.md`. |
 | `templates/theme.css` | The design system. Brand tokens are lifted from the shipping app, not invented. |
 | `templates/render.mjs` | Slide object → HTML. Add a slide type here and in `theme.css`. |
-| `scripts/make-slideshow.mjs` | The generator. No npm dependencies. |
+| `scripts/make-slideshow.mjs` | The renderer. PNG + JPEG per slide. No npm dependencies. |
+| `scripts/write-decks.mjs` | The daily deck writer (Gemini), strict-validated. |
+| `scripts/make-images.mjs` | Slide photos (Gemini image model), cached by prompt. |
+| `scripts/daily.mjs` | write → images → render → enqueue, idempotent. |
+| `lib/` | Shared: paths (`MARKETING_DATA_DIR`), validation, Gemini client, `.env` loader. |
+| `Dockerfile` | The bot + pipeline as one always-on container, state on a `/data` volume. |
 | `bot/` | Telegram approval gate — queue, publishers, tests. See `bot/README.md`. |
 | `FEEDBACK.md` | Written by the bot. Every rejection and change request, with its reason. **The input to the next batch's `HOOKS.md`.** |
 | `out/` | Generated. Safe to delete and regenerate. |

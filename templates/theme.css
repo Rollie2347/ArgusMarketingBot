@@ -369,6 +369,41 @@ body {
   line-height: 1.34;
 }
 
+/* --- generated photograph (optional, any slide type) ----------------------- */
+
+/* Full-bleed behind everything. The image is generated at 9:16; object-fit
+   crops it to 4:5 for Instagram, centred, so one generation serves both. */
+.slide > .bgimg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+}
+
+/* The scrim is what makes copy legible over an arbitrary photo. It is darkest
+   where the text sits: the lower two-thirds on a hook (bottom-weighted), and
+   evenly across the frame everywhere else, where the stage is centred. */
+.slide > .scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(180deg, rgba(8,8,12,.62) 0%, rgba(8,8,12,.80) 45%, rgba(8,8,12,.90) 100%);
+}
+.slide[data-type="hook"] > .scrim {
+  background: linear-gradient(180deg, rgba(8,8,12,.30) 0%, rgba(8,8,12,.18) 26%, rgba(8,8,12,.78) 58%, rgba(8,8,12,.96) 100%);
+}
+/* The gold bloom would muddy a photograph. */
+html[data-image="1"] .slide::before { display: none; }
+/* Text on a photo needs more than colour contrast — a soft shadow keeps thin
+   strokes from breaking up over busy areas. */
+html[data-image="1"] .stage, html[data-image="1"] .topbar { text-shadow: 0 2px 18px rgba(0,0,0,.55); }
+html[data-image="1"] .footer { border-top-color: rgba(232,224,208,.16); }
+/* --muted (#9e978a) is tuned for flat #08080c; over a photo it loses about a
+   stop of contrast, so secondary copy is lifted toward cream on these slides. */
+html[data-image="1"] .body, html[data-image="1"] .sub { color: #cdc5b6; }
+
 /* --- safe-zone debug overlay ---------------------------------------------- */
 
 html[data-safe="1"] .slide::after {

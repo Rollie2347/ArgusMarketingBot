@@ -18,7 +18,7 @@
 
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { OUT_DIR } from "./config.mjs";
+import { OUT_DIR, DECKS_DIR } from "./config.mjs";
 import { load, save, add, find, itemId, transition, summarize } from "./queue.mjs";
 
 const argv = process.argv.slice(2);
@@ -31,6 +31,32 @@ const q = load();
 
 if (has("list")) {
   console.log(`\n${summarize(q)}\n`);
+  process.exit(0);
+}
+
+// Items not yet decided pick up the deck's CURRENT copy and slide files —
+// after a deck is edited and re-rendered (e.g. the 2026-09-26 switch of the
+// TikTok CTA away from "link in bio"). Anything approved or later is left
+// exactly as it was: that is the record of what was actually posted.
+if (has("refresh")) {
+  let n = 0;
+  for (const item of q.items) {
+    if (!["pending", "awaiting"].includes(item.status)) continue;
+    const deckSrc = join(DECKS_DIR, `${item.deckId}.json`);
+    const dir = join(OUT_DIR, item.deckId, item.platform);
+    if (!existsSync(deckSrc) || !existsSync(dir)) { console.warn(`  ! ${item.id}: deck or render missing, left as is`); continue; }
+    const deck = JSON.parse(readFileSync(deckSrc, "utf8"));
+    const slideFiles = readdirSync(dir).filter((f) => f.endsWith(".png")).sort();
+    const jpgFiles = readdirSync(dir).filter((f) => f.endsWith(".jpg")).sort();
+    item.caption = deck.caption?.[item.platform] || item.caption;
+    item.hashtags = (deck.hashtags?.[item.platform] || []).map((t) => (t.startsWith("#") ? t : `#${t}`));
+    item.slideFiles = slideFiles;
+    item.jpgFiles = jpgFiles.length === slideFiles.length ? jpgFiles : [];
+    item.history.push({ status: item.status, at: new Date().toISOString(), note: "copy and slides refreshed from the current deck" });
+    n++;
+  }
+  save(q);
+  console.log(`\n  ✓ refreshed ${n} undecided item(s)\n`);
   process.exit(0);
 }
 
@@ -73,7 +99,7 @@ for (const deckId of deckDirs) {
   // manifest.json holds captions only by reference, so read the deck source
   // for the copy. It is the one thing the manifest deliberately does not
   // duplicate, to avoid two copies of the caption drifting apart.
-  const deckSrc = join(OUT_DIR, "..", "decks", `${deckId}.json`);
+  const deckSrc = join(DECKS_DIR, `${deckId}.json`);
   const deck = existsSync(deckSrc) ? JSON.parse(readFileSync(deckSrc, "utf8")) : null;
   if (!deck) { console.warn(`  ! ${deckId}: decks/${deckId}.json missing, skipping`); continue; }
 
@@ -84,6 +110,10 @@ for (const deckId of deckDirs) {
     if (!existsSync(dir)) { console.warn(`  ! ${deckId}/${platform}: not rendered, skipping`); continue; }
     const slideFiles = readdirSync(dir).filter((f) => f.endsWith(".png")).sort();
     if (!slideFiles.length) { console.warn(`  ! ${deckId}/${platform}: no PNGs, skipping`); continue; }
+    // JPEG twins, for the API publishers (TikTok's photo API refuses PNG).
+    // Absent for decks rendered before they existed or with --fallback;
+    // publishers/uploadpost.mjs fails loudly rather than guessing.
+    const jpgFiles = readdirSync(dir).filter((f) => f.endsWith(".jpg")).sort();
 
     const link = m.links?.[platform] || {};
     const id = itemId(deckId, platform);
@@ -99,6 +129,11 @@ for (const deckId of deckDirs) {
       capabilities: m.capabilities || [],
 
       slideFiles,
+      jpgFiles: jpgFiles.length === slideFiles.length ? jpgFiles : [],
+      // Generated photographs → the platforms' AI-generated-content label.
+      aiImages: Boolean(m.aiImages),
+      // Written by the daily writer; notes say e.g. which image failed.
+      generated: m.generated || null,
       caption: deck.caption?.[platform] || "",
       hashtags: (deck.hashtags?.[platform] || []).map((t) => (t.startsWith("#") ? t : `#${t}`)),
 

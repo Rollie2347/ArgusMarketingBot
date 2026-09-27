@@ -51,6 +51,37 @@ Everything else is escaped. There is no raw HTML.
   "fineprint": "…" }
 ```
 
+## Per-platform copy
+
+Any copy string may be `{ "tiktok": "…", "instagram": "…" }` instead of a string. The TikTok
+account is **personal** (`config.json` `tiktokAccount`), which can't link to the App Store, so
+TikTok copy must never say "link in bio" — validation refuses it for every deck:
+
+```jsonc
+"pill": { "tiktok": "Search “My Argus” · App Store", "instagram": "Link in bio" }
+```
+
+## Optional photo, on any slide
+
+```jsonc
+{ "type": "hook", "headline": "…",
+  "image": { "prompt": "an open refrigerator at night, eggs on a shelf, warm light" } }
+```
+
+`node scripts/make-images.mjs <deckId>` generates it (9:16, cropped to 4:5 for Instagram) and
+fills in `"file"`; the slide renders it full-bleed behind a scrim. A deck whose image slot is
+unfilled refuses to render. Prompts describe a **photograph of the real-world scene** — never the
+app, a phone screen, an interface, text or a logo (validation refuses those words). Generated
+decks use it on the hook slide and at most one other.
+
+## Generated decks
+
+Decks written by `scripts/write-decks.mjs` are named `<yymmdd>-<n>-<slug>`, carry a
+`"generated": { "by", "at", "batch" }` block, and are validated in **strict** mode on top of the
+checks below: `hookId`/`ctaId` must be live ids in HOOKS.md, the hook must belong to the
+`angle`, `capabilities` must be on the verified list in `lib/validate.mjs`, and copy must fit
+the ceilings there. `ct` and the id are set by the writer, not the model.
+
 ## Validation the generator enforces
 
 - 6–9 slides; slide 1 is `hook`; last slide is `cta`

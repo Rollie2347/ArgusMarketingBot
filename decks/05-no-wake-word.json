@@ -3,9 +3,12 @@
   "angle": "demo-the-magic",
   "hookId": "DM-06",
   "ctaId": "CTA-02",
-  "capabilities": ["identify_scene", "get_weather", "recall_memory"],
+  "capabilities": [
+    "identify_scene",
+    "get_weather",
+    "recall_memory"
+  ],
   "ct": "dm-2609",
-
   "slides": [
     {
       "type": "hook",
@@ -27,8 +30,14 @@
     {
       "type": "quote",
       "turns": [
-        { "who": "you", "text": "What is — hang on — this thing, the one on the left" },
-        { "who": "argus", "text": "The blue-handled one? That's a torque wrench. What are you fitting?" }
+        {
+          "who": "you",
+          "text": "What is — hang on — this thing, the one on the left"
+        },
+        {
+          "who": "argus",
+          "text": "The blue-handled one? That's a torque wrench. What are you fitting?"
+        }
       ]
     },
     {
@@ -47,18 +56,39 @@
       "type": "cta",
       "headline": "Open it and say something",
       "body": "It talks first, so you don't have to work out how to start.",
-      "pill": "Free on iPhone — link in bio",
+      "pill": {
+        "tiktok": "Free on iPhone — search “My Argus”",
+        "instagram": "Free on iPhone — link in bio"
+      },
       "fineprint": "No sign-up. No password. Delete everything from inside the app."
     }
   ],
-
   "caption": {
-    "tiktok": "No wake word, no press-and-hold, no perfect sentence. You open it, it says hello, and then you just talk — while it's looking at whatever you're pointing it at.\n\nFree on iPhone, link in bio.",
+    "tiktok": "No wake word, no press-and-hold, no perfect sentence. You open it, it says hello, and then you just talk — while it's looking at whatever you're pointing it at.\n\nFree on iPhone — search “My Argus” on the App Store (the gold ring).",
     "instagram": "The whole ritual — say the name, wait for the chime, deliver one clean sentence — disappears when the thing can already see what you're talking about.\n\nArgus speaks first, listens continuously while you're connected, and lets you trail off and correct yourself like a person. It'll say what it's doing with your camera and mic before you start, too.\n\nSend this to someone still shouting at a smart speaker.\n\nFree on iPhone — link in bio."
   },
-
   "hashtags": {
-    "tiktok": ["voiceassistant", "aiapp", "iphoneapps", "techtips", "gadgets", "siri", "handsfree", "newapp"],
-    "instagram": ["voiceassistant", "aitools", "iphoneapp", "techtips", "gadgets", "handsfree", "appsyouneed", "voiceai", "newapps", "productivity"]
+    "tiktok": [
+      "voiceassistant",
+      "aiapp",
+      "iphoneapps",
+      "techtips",
+      "gadgets",
+      "siri",
+      "handsfree",
+      "newapp"
+    ],
+    "instagram": [
+      "voiceassistant",
+      "aitools",
+      "iphoneapp",
+      "techtips",
+      "gadgets",
+      "handsfree",
+      "appsyouneed",
+      "voiceai",
+      "newapps",
+      "productivity"
+    ]
   }
 }

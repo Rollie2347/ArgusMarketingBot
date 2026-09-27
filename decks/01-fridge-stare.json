@@ -3,9 +3,12 @@
   "angle": "problem-solution",
   "hookId": "PS-01",
   "ctaId": "CTA-01",
-  "capabilities": ["identify_scene", "get_recipe_suggestion", "remember_preference"],
+  "capabilities": [
+    "identify_scene",
+    "get_recipe_suggestion",
+    "remember_preference"
+  ],
   "ct": "ps-2609",
-
   "slides": [
     {
       "type": "hook",
@@ -29,8 +32,14 @@
       "type": "quote",
       "headline": "What that actually sounds like",
       "turns": [
-        { "who": "you", "text": "I've got about twenty minutes. What can I do with this?" },
-        { "who": "argus", "text": "Eggs, that half lemon and the parsley — that's a herb omelette. Fifteen minutes. You'd want the butter too, back left." }
+        {
+          "who": "you",
+          "text": "I've got about twenty minutes. What can I do with this?"
+        },
+        {
+          "who": "argus",
+          "text": "Eggs, that half lemon and the parsley — that's a herb omelette. Fifteen minutes. You'd want the butter too, back left."
+        }
       ]
     },
     {
@@ -57,18 +66,39 @@
       "type": "cta",
       "headline": "Point it at your fridge tonight",
       "body": "Free. iPhone. No sign-up.",
-      "pill": "Link in bio",
+      "pill": {
+        "tiktok": "Search “My Argus” · App Store",
+        "instagram": "Link in bio"
+      },
       "fineprint": "Argus uses Google's Gemini Live to see and talk in real time."
     }
   ],
-
   "caption": {
-    "tiktok": "The fridge has everything in it and you still order takeout. This is the fix — hold the phone up, say what you've got twenty minutes for, and it just tells you. It also remembers the allergy so you never type it again.\n\nFree on iPhone, link in bio.",
+    "tiktok": "The fridge has everything in it and you still order takeout. This is the fix — hold the phone up, say what you've got twenty minutes for, and it just tells you. It also remembers the allergy so you never type it again.\n\nFree on iPhone — search “My Argus” on the App Store (the gold ring).",
     "instagram": "The 6pm fridge stare, solved.\n\nNo typing twelve ingredients into a recipe app. Point the camera, talk normally, get something you can actually make with what's on the shelf — minus whatever you can't eat, because it remembers that part.\n\nSend this to whoever in your house asks what's for dinner.\n\nFree on iPhone — link in bio."
   },
-
   "hashtags": {
-    "tiktok": ["whatsfordinner", "fridgeraid", "cookingtips", "kitchenhack", "aiapp", "iphoneapps", "easydinner", "mealidea"],
-    "instagram": ["whatsfordinner", "fridgeraid", "weeknightdinner", "cookingtips", "kitchenhacks", "aitools", "iphoneapp", "mealinspo", "foodallergies", "easyrecipes"]
+    "tiktok": [
+      "whatsfordinner",
+      "fridgeraid",
+      "cookingtips",
+      "kitchenhack",
+      "aiapp",
+      "iphoneapps",
+      "easydinner",
+      "mealidea"
+    ],
+    "instagram": [
+      "whatsfordinner",
+      "fridgeraid",
+      "weeknightdinner",
+      "cookingtips",
+      "kitchenhacks",
+      "aitools",
+      "iphoneapp",
+      "mealinspo",
+      "foodallergies",
+      "easyrecipes"
+    ]
   }
 }

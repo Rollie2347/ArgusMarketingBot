@@ -3,9 +3,11 @@
   "angle": "problem-solution",
   "hookId": "PS-02",
   "ctaId": "CTA-06",
-  "capabilities": ["read_text", "remember_preference"],
+  "capabilities": [
+    "read_text",
+    "remember_preference"
+  ],
   "ct": "ps-2609",
-
   "slides": [
     {
       "type": "hook",
@@ -28,8 +30,14 @@
     {
       "type": "quote",
       "turns": [
-        { "who": "you", "text": "Is there anything in this I shouldn't have?" },
-        { "who": "argus", "text": "It lists milk powder, third ingredient. You told me dairy was out — I'd put this one back." }
+        {
+          "who": "you",
+          "text": "Is there anything in this I shouldn't have?"
+        },
+        {
+          "who": "argus",
+          "text": "It lists milk powder, third ingredient. You told me dairy was out — I'd put this one back."
+        }
       ]
     },
     {
@@ -42,27 +50,57 @@
       "type": "list",
       "headline": "Also readable",
       "items": [
-        { "text": "Washing instructions on a clothing tag", "note": "the ones printed in grey on grey" },
-        { "text": "A handwritten note someone left you" },
-        { "text": "Cooking instructions on a packet across the kitchen" },
-        { "text": "A form, a sign, a screen, a receipt" }
+        {
+          "text": "Washing instructions on a clothing tag",
+          "note": "the ones printed in grey on grey"
+        },
+        {
+          "text": "A handwritten note someone left you"
+        },
+        {
+          "text": "Cooking instructions on a packet across the kitchen"
+        },
+        {
+          "text": "A form, a sign, a screen, a receipt"
+        }
       ]
     },
     {
       "type": "cta",
       "headline": "Next unreadable thing, just ask",
       "body": "Free on iPhone. No account, no password, and you can delete everything in one tap.",
-      "pill": "Link in bio"
+      "pill": {
+        "tiktok": "Search “My Argus” · App Store",
+        "instagram": "Link in bio"
+      }
     }
   ],
-
   "caption": {
-    "tiktok": "Nutrition labels are printed for ants and shops are lit like caves. Hold the phone up, ask what's in it, and it reads the thing to you — including whether it's got the one ingredient you can't have, because you only have to tell it that once.\n\nFree on iPhone, link in bio.",
+    "tiktok": "Nutrition labels are printed for ants and shops are lit like caves. Hold the phone up, ask what's in it, and it reads the thing to you — including whether it's got the one ingredient you can't have, because you only have to tell it that once.\n\nFree on iPhone — search “My Argus” on the App Store (the gold ring).",
     "instagram": "Six-point type, dim shop, jar held at arm's length. We've all done it.\n\nArgus reads labels out loud through the camera — ingredients, allergens, the serving size the numbers actually refer to. And it remembers what you can't eat, so it just tells you to put the jar back.\n\nSend this to whoever reads every label in the shop.\n\nFree on iPhone — link in bio."
   },
-
   "hashtags": {
-    "tiktok": ["grocerytips", "foodallergies", "labelreading", "shoppingtips", "aiapp", "iphoneapps", "accessibility", "lifehack"],
-    "instagram": ["grocerytips", "foodallergy", "allergyfriendly", "labelreading", "shoppinghacks", "aitools", "iphoneapp", "accessibility", "lowvision", "celiac"]
+    "tiktok": [
+      "grocerytips",
+      "foodallergies",
+      "labelreading",
+      "shoppingtips",
+      "aiapp",
+      "iphoneapps",
+      "accessibility",
+      "lifehack"
+    ],
+    "instagram": [
+      "grocerytips",
+      "foodallergy",
+      "allergyfriendly",
+      "labelreading",
+      "shoppinghacks",
+      "aitools",
+      "iphoneapp",
+      "accessibility",
+      "lowvision",
+      "celiac"
+    ]
   }
 }

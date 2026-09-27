@@ -4,40 +4,23 @@
  * Every secret is an environment variable, loaded from bot/.env (gitignored)
  * or from the real environment. Nothing here is ever printed — validate()
  * reports the NAME of a missing variable and never its value, and the summary
- * it prints shows only lengths and suffixes.
+ * it prints shows only lengths.
  */
 
-import { readFileSync, existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { ENV_FILE } from "../lib/env.mjs";
+import { STATE_DIR, OUT_DIR, FEEDBACK_FILE, MARKETING_ROOT, DECKS_DIR } from "../lib/paths.mjs";
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-export const MARKETING_ROOT = resolve(HERE, "..");
-export const OUT_DIR = join(MARKETING_ROOT, "out");
-export const STATE_DIR = join(HERE, "state");
+export { STATE_DIR, OUT_DIR, FEEDBACK_FILE, MARKETING_ROOT, DECKS_DIR };
 export const QUEUE_FILE = join(STATE_DIR, "queue.json");
-export const FEEDBACK_FILE = join(MARKETING_ROOT, "FEEDBACK.md");
+/** Records which day's batch already ran, so a restart doesn't run it twice. */
+export const DAILY_FILE = join(STATE_DIR, "daily.json");
 
-/**
- * A deliberately small .env reader rather than the dotenv dependency: this is
- * a standalone tool outside backend/, and adding a dependency to read six
- * lines is not worth a node_modules tree here.
- */
-function loadDotEnv() {
-  const file = join(HERE, ".env");
-  if (!existsSync(file)) return;
-  for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)$/);
-    if (!m) continue;
-    const key = m[1];
-    let val = m[2].trim();
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-      val = val.slice(1, -1);
-    }
-    if (process.env[key] === undefined) process.env[key] = val;
-  }
+/** "13:00, 09:00" → ["09:00", "13:00"]; anything that isn't HH:MM is dropped. */
+function times(v) {
+  return String(v || "").split(",").map((t) => t.trim())
+    .filter((t) => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)).sort();
 }
-loadDotEnv();
 
 export const config = {
   botToken: process.env.TELEGRAM_BOT_TOKEN || null,
@@ -46,22 +29,59 @@ export const config = {
   allowedChatId: process.env.TELEGRAM_CHAT_ID || null,
   pollTimeoutSec: parseInt(process.env.TELEGRAM_POLL_TIMEOUT_SEC || "30", 10),
 
-  // Publishing. "manual" = mark approved and write a ready-to-post bundle.
-  // See publishers/README section in bot/README.md for what it takes to move
-  // a platform off manual.
+  // Publishing, per platform:
+  //   "telegram"   (default) slides + caption sent to Telegram at the slot, you post by hand
+  //   "instagram"  free, automatic: Instagram API with Instagram Login + the public bucket
+  //   "uploadpost" paid aggregator, automatic on both platforms
+  //   "manual"     hand-off file on the bot's own disk (legacy)
+  //   "tiktok"     always fails — TikTok's API needs our own passed audit
   publishers: {
-    tiktok: process.env.PUBLISH_TIKTOK || "manual",
-    instagram: process.env.PUBLISH_INSTAGRAM || "manual",
+    tiktok: process.env.PUBLISH_TIKTOK || "telegram",
+    instagram: process.env.PUBLISH_INSTAGRAM || "telegram",
   },
 
+  // Upload-Post (upload-post.com) publishes to TikTok and Instagram through
+  // its own already-audited API apps. See publishers/uploadpost.mjs.
+  uploadpost: {
+    apiKey: process.env.UPLOADPOST_API_KEY || null,
+    // The Upload-Post profile the TikTok and Instagram accounts are connected under.
+    user: process.env.UPLOADPOST_USER || null,
+    // DIRECT_POST publishes. MEDIA_UPLOAD sends TikTok a draft to finish in
+    // the app — the safe setting for the very first run.
+    tiktokPostMode: process.env.UPLOADPOST_TIKTOK_POST_MODE || "DIRECT_POST",
+    // Business accounts only get the Commercial Music Library (RESEARCH §1.4);
+    // auto music picks from what the account is allowed to use.
+    tiktokAutoMusic: process.env.UPLOADPOST_TIKTOK_AUTO_MUSIC !== "0",
+    apiBase: process.env.UPLOADPOST_API_BASE || "https://api.upload-post.com",
+  },
+
+  // Instagram API with Instagram Login. The token is refreshed by the bot and
+  // the refreshed value lives in state/ig-token.json (igtoken.mjs); the env
+  // var only seeds it. Slides are hosted in MARKETING_GCS_BUCKET (lib/gcs.mjs).
   instagram: {
     userId: process.env.IG_USER_ID || null,
     accessToken: process.env.IG_ACCESS_TOKEN || null,
-    // Meta FETCHES image URLs server-side, so the PNGs must already be on a
-    // public HTTPS host. Local files cannot be uploaded to this API.
-    publicAssetBase: process.env.IG_PUBLIC_ASSET_BASE || null,
-    graphVersion: process.env.IG_GRAPH_VERSION || "v21.0",
+    graphVersion: process.env.IG_GRAPH_VERSION || "v25.0",
   },
+
+  // When approved posts go out, in the process's local time (set TZ on a
+  // server). POST_TIMES unset = publish the moment you approve.
+  schedule: {
+    times: times(process.env.POST_TIMES),
+    // Per platform per day. 1 during the ~10-day account warm-up
+    // (CALENDAR.md, RESEARCH §6.1); raise to 3 once the accounts are warm.
+    perDay: Math.max(1, parseInt(process.env.POSTS_PER_DAY || "1", 10) || 1),
+    // One-day override: on BURST_DATE (YYYY-MM-DD, local) the slots are
+    // BURST_TIMES and the cap is one post per burst time — e.g. a launch day.
+    // Every other day uses the normal times and cap, so it needs no undoing.
+    burst: /^\d{4}-\d{2}-\d{2}$/.test(process.env.BURST_DATE || "") && times(process.env.BURST_TIMES).length
+      ? { date: process.env.BURST_DATE, times: times(process.env.BURST_TIMES) }
+      : null,
+  },
+
+  // The bot runs scripts/daily.mjs once a day at this local time.
+  // Unset = only on /generate.
+  dailyRunAt: times(process.env.DAILY_RUN_AT)[0] || null,
 };
 
 export function validate({ requirePublishing = false } = {}) {
@@ -69,15 +89,22 @@ export function validate({ requirePublishing = false } = {}) {
   if (!config.botToken) missing.push("TELEGRAM_BOT_TOKEN");
   if (!config.allowedChatId) missing.push("TELEGRAM_CHAT_ID");
 
+  if (requirePublishing && Object.values(config.publishers).includes("uploadpost")) {
+    if (!config.uploadpost.apiKey) missing.push("UPLOADPOST_API_KEY");
+    if (!config.uploadpost.user) missing.push("UPLOADPOST_USER");
+  }
+
   if (requirePublishing && config.publishers.instagram === "instagram") {
-    if (!config.instagram.userId) missing.push("IG_USER_ID");
-    if (!config.instagram.accessToken) missing.push("IG_ACCESS_TOKEN");
-    if (!config.instagram.publicAssetBase) missing.push("IG_PUBLIC_ASSET_BASE");
+    // IG_USER_ID / IG_ACCESS_TOKEN may instead come from the /instagram
+    // Telegram command (state/ig-token.json), so they aren't required here;
+    // the publisher fails loudly if neither exists.
+    if (!process.env.MARKETING_GCS_BUCKET) missing.push("MARKETING_GCS_BUCKET");
+    if (!process.env.MARKETING_GCS_KEY_B64) missing.push("MARKETING_GCS_KEY_B64");
   }
 
   if (missing.length) {
     console.error(`\n  ✗ missing environment variable(s): ${missing.join(", ")}`);
-    console.error(`    Set them in ${join(HERE, ".env")} (gitignored) — see bot/README.md\n`);
+    console.error(`    Set them in ${ENV_FILE} (gitignored) or the real environment — see bot/README.md\n`);
     process.exit(1);
   }
 }

@@ -56,6 +56,25 @@ function rich(s) {
 }
 
 /* --------------------------------------------------------------------------
+   per-platform copy
+   Any copy string may instead be { "tiktok": "…", "instagram": "…" }. Used
+   where the platforms genuinely differ — the TikTok account is a personal
+   one and cannot link to the App Store, so its CTA says "search My Argus"
+   while Instagram's says "link in bio".
+   -------------------------------------------------------------------------- */
+
+const isPlatformMap = (v) => v && typeof v === "object" && !Array.isArray(v) &&
+  Object.keys(v).length > 0 && Object.keys(v).every((k) => k in PLATFORMS);
+
+/** A slide (or any value) with every per-platform map resolved for `platform`. */
+export function forPlatform(v, platform) {
+  if (isPlatformMap(v)) return v[platform] ?? "";
+  if (Array.isArray(v)) return v.map((x) => forPlatform(x, platform));
+  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, forPlatform(x, platform)]));
+  return v;
+}
+
+/* --------------------------------------------------------------------------
    furniture
    -------------------------------------------------------------------------- */
 
@@ -63,7 +82,8 @@ function topbar(slide, ctx) {
   const left = slide.eyebrow
     ? `<div class="eyebrow">${rich(slide.eyebrow)}</div>`
     : `<div class="mark"><span class="ring" style="--ring:44px"></span><span class="wordmark">Argus</span></div>`;
-  const right = ctx.index === 0
+  // No swipe cue when the slides become a video (TikTok via the browser bot).
+  const right = ctx.index === 0 && !ctx.noSwipe
     ? `<div class="swipe"><span>Swipe</span><span class="arrow">&rsaquo;</span></div>`
     : "";
   return `<div class="topbar">${left}${right}</div>`;
@@ -185,12 +205,17 @@ const AUTOFIT = `
 
 /**
  * @param {object} slide  one entry from a script's slides[]
- * @param {object} ctx    { platform, index, total, isLast, handle, safe }
+ * @param {object} ctx    { platform, index, total, isLast, handle, safe, imageUrl? }
+ *
+ * imageUrl, when set, is a file:// URL to a generated photograph for this slide
+ * (scripts/make-images.mjs). It sits full-bleed behind a scrim so the copy on
+ * top stays legible — the image is atmosphere, never the message.
  */
 export function renderPage(slide, ctx) {
   if (!PLATFORMS[ctx.platform]) throw new Error(`unknown platform "${ctx.platform}"`);
+  slide = forPlatform(slide, ctx.platform);
   return `<!doctype html>
-<html lang="en" data-platform="${ctx.platform}"${ctx.safe ? ' data-safe="1"' : ""}>
+<html lang="en" data-platform="${ctx.platform}"${ctx.safe ? ' data-safe="1"' : ""}${ctx.imageUrl ? ' data-image="1"' : ""}>
 <head>
 <meta charset="utf-8">
 <title>${esc(ctx.deckId || "argus")} ${ctx.index + 1}</title>
@@ -198,6 +223,7 @@ export function renderPage(slide, ctx) {
 </head>
 <body>
 <div class="slide" data-type="${esc(slide.type)}">
+  ${ctx.imageUrl ? `<img class="bgimg" src="${esc(ctx.imageUrl)}" alt=""><div class="scrim"></div>` : ""}
   ${topbar(slide, ctx)}
   <div class="stage">${renderStage(slide)}</div>
   ${footer(slide, ctx)}

@@ -1,0 +1,15 @@
+{
+  "name": "argus-marketing",
+  "private": true,
+  "type": "module",
+  "description": "Argus slideshow pipeline: daily AI-written decks, Telegram approval, scheduled posting.",
+  "scripts": {
+    "test": "node --test \"bot/test/*.test.mjs\" \"test/*.test.mjs\"",
+    "bot": "node bot/bot.mjs",
+    "daily": "node scripts/daily.mjs",
+    "tiktok-login": "node scripts/tiktok-login.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "^1.56.0"
+  }
+}

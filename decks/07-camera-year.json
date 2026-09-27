@@ -3,9 +3,13 @@
   "angle": "curiosity-gap",
   "hookId": "CG-01",
   "ctaId": "CTA-03",
-  "capabilities": ["identify_scene", "read_text", "diagnose_problem", "compare_products"],
+  "capabilities": [
+    "identify_scene",
+    "read_text",
+    "diagnose_problem",
+    "compare_products"
+  ],
   "ct": "cg-2609",
-
   "slides": [
     {
       "type": "hook",
@@ -28,10 +32,18 @@
       "type": "list",
       "headline": "What that's good for, honestly",
       "items": [
-        { "text": "Reading something too small to read" },
-        { "text": "Naming a part you can't name" },
-        { "text": "Choosing between two things in your hands" },
-        { "text": "Working out dinner from what's actually in the fridge" }
+        {
+          "text": "Reading something too small to read"
+        },
+        {
+          "text": "Naming a part you can't name"
+        },
+        {
+          "text": "Choosing between two things in your hands"
+        },
+        {
+          "text": "Working out dinner from what's actually in the fridge"
+        }
       ]
     },
     {
@@ -52,18 +64,39 @@
       "type": "cta",
       "headline": "Try it on the next thing you can't identify",
       "body": "Free. iPhone.",
-      "pill": "Link in bio",
+      "pill": {
+        "tiktok": "Search “My Argus” · App Store",
+        "instagram": "Link in bio"
+      },
       "fineprint": "No account, no password. Delete everything from inside the app."
     }
   ],
-
   "caption": {
-    "tiktok": "Phones have been able to do this for about a year and it mostly got used for stage demos. The useful version is unglamorous: point it at the thing you can't read, can't name, or can't choose between, and ask.\n\nFree on iPhone, link in bio.",
+    "tiktok": "Phones have been able to do this for about a year and it mostly got used for stage demos. The useful version is unglamorous: point it at the thing you can't read, can't name, or can't choose between, and ask.\n\nFree on iPhone — search “My Argus” on the App Store (the gold ring).",
     "instagram": "Live camera + live voice models have existed for roughly a year. Almost all of it got spent identifying landmarks on stage.\n\nThe actually useful version is much more boring — which tin has less salt, what is this part called, what can I make with this. That's what Argus is for.\n\nIt does need to see and hear while you're connected, and it tells you that up front.\n\nSend this to someone who thinks AI apps are all the same.\n\nFree on iPhone — link in bio."
   },
-
   "hashtags": {
-    "tiktok": ["techtips", "aiapp", "iphonetips", "iphoneapps", "didyouknow", "gadgets", "aitools", "phonetricks"],
-    "instagram": ["techtips", "aitools", "iphonetips", "iphoneapp", "didyouknow", "gadgets", "appsyouneed", "technology", "phonehacks", "newapps"]
+    "tiktok": [
+      "techtips",
+      "aiapp",
+      "iphonetips",
+      "iphoneapps",
+      "didyouknow",
+      "gadgets",
+      "aitools",
+      "phonetricks"
+    ],
+    "instagram": [
+      "techtips",
+      "aitools",
+      "iphonetips",
+      "iphoneapp",
+      "didyouknow",
+      "gadgets",
+      "appsyouneed",
+      "technology",
+      "phonehacks",
+      "newapps"
+    ]
   }
 }

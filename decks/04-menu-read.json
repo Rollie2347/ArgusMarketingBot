@@ -3,9 +3,13 @@
   "angle": "demo-the-magic",
   "hookId": "DM-04",
   "ctaId": "CTA-01",
-  "capabilities": ["find_places_nearby", "research_place", "read_webpage", "remember_preference"],
+  "capabilities": [
+    "find_places_nearby",
+    "research_place",
+    "read_webpage",
+    "remember_preference"
+  ],
   "ct": "dm-2609",
-
   "slides": [
     {
       "type": "hook",
@@ -34,9 +38,18 @@
     {
       "type": "quote",
       "turns": [
-        { "who": "argus", "text": "Onesto, about half a mile. Their menu's got a pork belly with honeycomb agrodolce at eighteen, and the pastas are all house-made." },
-        { "who": "you", "text": "Anything on there I can't eat?" },
-        { "who": "argus", "text": "The burrata starter, and I'd ask about the pesto." }
+        {
+          "who": "argus",
+          "text": "Onesto, about half a mile. Their menu's got a pork belly with honeycomb agrodolce at eighteen, and the pastas are all house-made."
+        },
+        {
+          "who": "you",
+          "text": "Anything on there I can't eat?"
+        },
+        {
+          "who": "argus",
+          "text": "The burrata starter, and I'd ask about the pesto."
+        }
       ]
     },
     {
@@ -49,17 +62,38 @@
       "type": "cta",
       "headline": "Ask it where to eat tonight",
       "body": "Free. iPhone. No sign-up.",
-      "pill": "Link in bio"
+      "pill": {
+        "tiktok": "Search “My Argus” · App Store",
+        "instagram": "Link in bio"
+      }
     }
   ],
-
   "caption": {
-    "tiktok": "Asked it for an Italian place nearby and what's good there. It found real restaurants with real distances, then opened the actual menu and read it back — dishes and prices, not a star rating.\n\nFree on iPhone, link in bio.",
+    "tiktok": "Asked it for an Italian place nearby and what's good there. It found real restaurants with real distances, then opened the actual menu and read it back — dishes and prices, not a star rating.\n\nFree on iPhone — search “My Argus” on the App Store (the gold ring).",
     "instagram": "\"Is there an Italian place near here, and what's good?\"\n\nMost assistants answer the first half and hand you a link. Argus does both — real places from the map with honest distances, then it opens the restaurant's own site, finds the menu and tells you what's actually on it. Including which bits you can't eat, if it knows that about you.\n\nSend this to whoever you argue with about where to eat.\n\nFree on iPhone — link in bio."
   },
-
   "hashtags": {
-    "tiktok": ["wheretoeat", "foodie", "restaurants", "dinnerplans", "aiapp", "iphoneapps", "localeats", "datenight"],
-    "instagram": ["wheretoeat", "foodie", "restaurantfinder", "dinnerplans", "localeats", "datenightideas", "aitools", "iphoneapp", "foodiefinds", "eatlocal"]
+    "tiktok": [
+      "wheretoeat",
+      "foodie",
+      "restaurants",
+      "dinnerplans",
+      "aiapp",
+      "iphoneapps",
+      "localeats",
+      "datenight"
+    ],
+    "instagram": [
+      "wheretoeat",
+      "foodie",
+      "restaurantfinder",
+      "dinnerplans",
+      "localeats",
+      "datenightideas",
+      "aitools",
+      "iphoneapp",
+      "foodiefinds",
+      "eatlocal"
+    ]
   }
 }
