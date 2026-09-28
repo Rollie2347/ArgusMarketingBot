@@ -37,10 +37,13 @@ DAILY_RUN_AT (or /generate)
     make-images.mjs   one photo for the hook slide (+ at most one more), cached by prompt
     make-slideshow    TikTok 9:16 + Instagram 4:5, PNG + JPEG
     enqueue           one queue item per deck per platform
-  → Telegram: one album + one card per deck
-      ✅ Approve both · ✅ TikTok only · ✅ Instagram only · ❌ Reject · ✏️ Changes
-  → approved items go into the next free slot (POST_TIMES, POSTS_PER_DAY per platform)
-  → at the slot: the publisher posts it, and Telegram hears the result — loudly if it failed
+  → Telegram: ONE message per deck — the slideshow video exactly as it will post,
+      its caption, and "OK to post?"  ✅ Post it · ❌ Don't post
+  → ✅ posts it right away (or at the next POST_TIMES slot, if set); one "✅ Posted" line back
+  → ❌ is final on the tap; replying with a reason is optional and goes to FEEDBACK.md
+  → everything else is silent except failures (🔥 with a screenshot)
+  → POST_PLATFORMS limits which platforms are asked about at all (Instagram: paused
+    until its token exists — see ../README.md)
   → ❌ / ✏️ reasons → FEEDBACK.md → tomorrow's writer reads them
 ```
 

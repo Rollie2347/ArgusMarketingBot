@@ -148,55 +148,55 @@ function publishModeNote(platform) {
   return mode;
 }
 
-function deckCard(items) {
-  const first = items[0];
-  const lines = [
-    `<b>${esc(first.title)}</b>`,
-    `${esc(first.angle)} · hook <code>${esc(first.hookId)}</code>${first.ctaId ? ` · cta <code>${esc(first.ctaId)}</code>` : ""}`,
-  ];
-  if (first.generated?.by) lines.push(`✎ written by ${esc(first.generated.by)}`);
-  for (const n of first.generated?.notes || []) lines.push(`⚠️ ${esc(clip(n, 200))}`);
-  if (first.aiImages) lines.push("🖼 AI-generated photos — posts carry the platforms' AI-content label");
+/* ── the ask ─────────────────────────────────────────────────────────────
+ * Rollie, 2026-09-27: the bot should only ask "OK to post?" and, on yes, post.
+ * So a deck arrives as ONE message: the slideshow exactly as it will go out
+ * (the TikTok video itself when it can be built), the caption it will carry,
+ * and two buttons. No hook ids, links, schedules or tracking rows — those
+ * stay in the queue and the logs.
+ * ------------------------------------------------------------------------ */
 
-  for (const it of items) {
-    lines.push(
-      "",
-      `<b>${esc(label(it.platform))}</b> · <i>${esc(publishModeNote(it.platform))}</i>`,
-      esc(clip(it.caption, 700)),
-      esc(clip(it.hashtags.join(" "), 300)),
-      `🔗 ${esc(it.trackingUrl || "(no redirect configured — marketing/TRACKING.md item 1)")}`,
-    );
-  }
-  lines.push("", `📦 ${first.slideFiles.length} slides · <code>${esc(first.deckId)}</code>`);
-  if (config.schedule.times.length) {
-    lines.push(`🗓 Approved posts go out at the next free slot (${config.schedule.times.join(", ")}; ${config.schedule.perDay}/day per platform)`);
-  }
-  return lines.join("\n");
+const PLATFORM_LIST = (items) => items.map((i) => label(i.platform)).join(" + ");
+/** Is this platform in POST_PLATFORMS? Everything else is ignored end to end. */
+const enabled = (it) => config.postPlatforms.includes(it.platform);
+
+function askText(items) {
+  const first = items[0];
+  const caption = (items.find((i) => i.platform === "tiktok") || first).caption || "";
+  // Video captions cap at 1024 characters, escaped HTML included.
+  return `<b>OK to post to ${esc(PLATFORM_LIST(items))}?</b>\n\n${esc(clip(caption, 700))}`;
 }
 
-function deckButtons(deckId, platforms) {
-  const rows = [[tg.button(platforms.length > 1 ? "✅ Approve both" : `✅ Approve ${label(platforms[0])}`, `A|${deckId}|*`)]];
-  if (platforms.length > 1) rows.push(platforms.map((p) => tg.button(`✅ ${label(p)} only`, `A|${deckId}|${p}`)));
-  rows.push([tg.button("❌ Reject", `R|${deckId}`), tg.button("✏️ Changes", `C|${deckId}`)]);
-  return tg.keyboard(rows);
+function askButtons(deckId) {
+  return tg.keyboard([[tg.button("✅ Post it", `A|${deckId}|*`), tg.button("❌ Don't post", `R|${deckId}`)]]);
 }
 
 async function deliverDeck(items) {
-  // TikTok's 9:16 cut is the fuller frame (the IG 4:5 version is a crop of
-  // the same design), so it is the one previewed.
   const preview = items.find((i) => i.platform === "tiktok") || items[0];
+
+  // Best: the video TikTok will actually get — reviewing it IS reviewing the
+  // post. If it can't be built (no ffmpeg, a missing slide) fall back to the
+  // slide images, so a deck is never stuck undelivered.
+  if (preview.platform === "tiktok" && config.publishers.tiktok === "tiktokweb") {
+    try {
+      const { makeSlideshowVideo } = await import("../lib/video.mjs");
+      const v = await makeSlideshowVideo(preview);
+      const sent = await tg.sendVideo(CHAT, readFileSync(v.path), {
+        caption: askText(items), duration: Math.round(v.seconds), width: 1080, height: 1920,
+        reply_markup: askButtons(preview.deckId),
+      });
+      return sent.message_id;
+    } catch (err) {
+      console.warn(`    ! ${preview.deckId}: video preview failed (${tg.redact(err.message)}) — sending the slides instead`);
+    }
+  }
+
   const dir = join(OUT_DIR, preview.deckId, preview.platform);
   const files = preview.slideFiles.map((f) => ({ name: f, bytes: readFileSync(join(dir, f)) }));
-
-  // Telegram albums cap at 10; decks are 6–9 slides.
-  await tg.sendMediaGroup(CHAT, files.slice(0, 10), `${preview.deckId} → ${preview.platform} preview`);
-
-  // Buttons go in a SECOND message: sendMediaGroup does not accept
-  // reply_markup. See telegram.mjs.
-  const sent = await tg.sendMessage(CHAT, deckCard(items) + (files.length > 10 ? "\n\n⚠️ more than 10 slides — only the first 10 were previewed" : ""), {
-    parse_mode: "HTML",
-    reply_markup: deckButtons(preview.deckId, items.map((i) => i.platform)),
-  });
+  // Telegram albums cap at 10 and can't carry buttons, so the question
+  // follows as its own message.
+  await tg.sendMediaGroup(CHAT, files.slice(0, 10), "");
+  const sent = await tg.sendMessage(CHAT, askText(items), { parse_mode: "HTML", reply_markup: askButtons(preview.deckId) });
   return sent.message_id;
 }
 
@@ -205,7 +205,7 @@ async function deliverPending() {
   if (delivering) return;
   delivering = true;
   try {
-    const pending = byStatus(load(), "pending");
+    const pending = byStatus(load(), "pending").filter(enabled);
     if (!pending.length) return;
     const decks = new Map();
     for (const it of pending) decks.set(it.deckId, [...(decks.get(it.deckId) || []), it]);
@@ -353,7 +353,10 @@ async function publishNow(id) {
       `It is approved but <b>not posted</b>. Nothing will retry on its own.`,
       { reply_markup: tg.keyboard([[tg.button("🔁 Retry publish", `p|${id}`)]]) });
   } else if (result.published) {
-    await say(`🚀 <b>Published</b> — <code>${esc(id)}</code>\n${esc(result.note)}${result.url ? `\n${esc(result.url)}` : ""}\n\nTRACKING.md row:\n<pre>${esc(trackingRow(it))}</pre>`);
+    // One line, as a reply to the deck it came from. (The TRACKING.md row is
+    // in the queue; /posted <id> <url> still adds a link.)
+    await say(`✅ Posted to ${esc(label(it.platform))}.${result.url ? ` ${esc(result.url)}` : ""}`,
+      it.deliveredMessageId ? { reply_to_message_id: it.deliveredMessageId, allow_sending_without_reply: true } : {});
   } else {
     await say(
       `✅ <b>Ready to post</b> — <code>${esc(id)}</code>\n\n` +
@@ -380,13 +383,15 @@ async function approve(ids) {
     return { id, scheduledFor: it.scheduledFor, platform: it.platform };
   }));
 
+  // With posting times set, say once when it will go out; with none (the
+  // default now), it posts straight away and the "Posted" line is the answer.
   const scheduled = outcome.filter((o) => o.scheduledFor);
   if (scheduled.length) {
-    await say(`✅ <b>Approved</b>\n${scheduled.map((o) => `🗓 ${esc(label(o.platform))}: ${esc(when(o.scheduledFor))}`).join("\n")}`);
+    await say(`👍 Will post to ${scheduled.map((o) => `${esc(label(o.platform))} at ${esc(when(o.scheduledFor))}`).join(", ")}.`);
   }
   for (const o of outcome) {
-    if (o.skipped) await say(`<code>${esc(o.id)}</code> is already ${esc(o.skipped)} — left alone.`);
-    else if (!o.scheduledFor) await publishNow(o.id);
+    if (o.skipped) continue; // a stale button — the callback already said so
+    if (!o.scheduledFor) await publishNow(o.id);
   }
 }
 
@@ -403,7 +408,7 @@ async function tick() {
     // slow publish can never be picked up twice by the next tick.
     const now = Date.now();
     const due = mutate((q) => q.items
-      .filter((i) => i.status === "scheduled" && Date.parse(i.scheduledFor) <= now)
+      .filter((i) => i.status === "scheduled" && Date.parse(i.scheduledFor) <= now && enabled(i))
       .map((i) => { transition(i, "approved", { by: "schedule" }); return i.id; }));
     for (const id of due) await publishNow(id);
 
@@ -452,7 +457,9 @@ async function runDaily({ force = false, reason }) {
   // tick — retrying a failing model call every 20s is how a bug spends money.
   writeDaily({ ...readDaily(), lastRunDate: localDate(new Date()), startedAt: new Date().toISOString() });
   try {
-    await say(`🛠 Generating today's decks <i>(${esc(reason)})</i>…`);
+    // Silent when it runs on its own schedule — the decks arriving is the
+    // message. Only a /generate you typed gets an acknowledgement.
+    if (!/scheduled/.test(reason)) await say("🛠 Making new slideshows — they'll arrive here in a few minutes.");
     const { code, out } = await new Promise((resolve) => {
       const p = spawn(process.execPath, [join(MARKETING_ROOT, "scripts", "daily.mjs"), ...(force ? ["--force"] : [])], { cwd: MARKETING_ROOT, env: process.env });
       const chunks = [];
@@ -472,10 +479,11 @@ async function runDaily({ force = false, reason }) {
       return;
     }
 
-    const parts = [`🗂 <b>${res.decks.length} deck(s) ready</b>: ${res.decks.map((d) => `<code>${esc(d)}</code>`).join(", ")}`];
-    for (const d of res.dropped || []) parts.push(`✗ dropped <code>${esc(d.slug)}</code> — failed validation twice: ${esc(clip(d.errors.join("; "), 400))}`);
-    for (const f of res.imageFailures || []) parts.push(`⚠️ ${esc(f.deckId)} slide ${esc(f.slide)}: no image (${esc(clip(f.error, 160))})`);
-    await say(parts.join("\n"));
+    // The batch summary goes to the log, not the chat: the "OK to post?"
+    // messages that follow are the only thing that needs you.
+    console.log(`  🗂 ${res.decks.length} deck(s) ready: ${res.decks.join(", ")}`);
+    for (const d of res.dropped || []) console.log(`  ✗ dropped ${d.slug} — failed validation twice: ${d.errors.join("; ")}`);
+    for (const f of res.imageFailures || []) console.log(`  ⚠️ ${f.deckId} slide ${f.slide}: no image (${f.error})`);
     await deliverPending();
   } finally {
     dailyRunning = false;
@@ -497,7 +505,7 @@ async function onCallback(cb) {
   // ── deck-level buttons (A / R / C) ──
   if (["A", "R", "C"].includes(action)) {
     const deckId = parts[1];
-    const open = deckItems(q, deckId).filter((i) => ["awaiting", "pending"].includes(i.status));
+    const open = deckItems(q, deckId).filter((i) => ["awaiting", "pending"].includes(i.status) && enabled(i));
     if (!open.length) {
       const states = deckItems(q, deckId).map((i) => `${label(i.platform)} ${i.status}`).join(", ");
       await tg.answerCallbackQuery(cb.id, states ? `Already decided: ${states}.` : "That deck is no longer in the queue.", true);
@@ -509,7 +517,7 @@ async function onCallback(cb) {
       const platform = parts[2];
       const chosen = platform === "*" ? open : open.filter((i) => i.platform === platform);
       const others = open.filter((i) => !chosen.includes(i));
-      await tg.answerCallbackQuery(cb.id, "Approving…");
+      await tg.answerCallbackQuery(cb.id, "Posting…");
       if (others.length) {
         // "TikTok only" is a decision about the other platform too — it must
         // not sit awaiting forever. Not written to FEEDBACK.md: it says
@@ -524,8 +532,30 @@ async function onCallback(cb) {
       return;
     }
 
-    const kind = action === "R" ? "rejected" : "changes_requested";
-    await tg.answerCallbackQuery(cb.id, action === "R" ? "Rejecting — send the reason." : "Send the changes.");
+    if (action === "R") {
+      // "Don't post" is final on the tap — no reason demanded. One line back,
+      // and an OPTIONAL reply still reaches FEEDBACK.md, which the deck
+      // writer reads, so a "why" still makes tomorrow's decks better.
+      await tg.answerCallbackQuery(cb.id, "Not posting it.");
+      const first = mutate((qq) => {
+        let f = null;
+        for (const o of open) {
+          const it = find(qq, o.id);
+          it.reason = "declined in Telegram (no reason given)";
+          transition(it, "rejected", { by: "telegram", reason: it.reason });
+          f ??= it;
+        }
+        return f;
+      });
+      if (first) recordFeedback(first, "reject", "(no reason given)", deckId);
+      awaitingReply.set(CHAT, { ids: open.map((i) => i.id), subject: deckId, kind: "reason", until: Date.now() + 30 * 60_000 });
+      await say("👌 Not posted. <i>Optional: reply with why, and future slideshows will learn from it.</i>",
+        cb.message ? { reply_to_message_id: cb.message.message_id, allow_sending_without_reply: true } : {});
+      return;
+    }
+
+    const kind = "changes_requested";
+    await tg.answerCallbackQuery(cb.id, "Send the changes.");
     awaitingReply.set(CHAT, { ids: open.map((i) => i.id), subject: deckId, kind });
     await say(
       `${action === "R" ? "❌" : "✏️"} <code>${esc(deckId)}</code> — reply to this message with ${action === "R" ? "why it was rejected" : "what to change"}.\n\n` +
@@ -598,7 +628,30 @@ async function onMessage(msg) {
   const text = String(msg.text || "").trim();
 
   // A pending reason/changes reply takes priority over command parsing.
-  const pendingReply = awaitingReply.get(CHAT);
+  let pendingReply = awaitingReply.get(CHAT);
+  if (pendingReply?.until && Date.now() > pendingReply.until) { awaitingReply.delete(CHAT); pendingReply = null; }
+
+  // The optional "why" after a "Don't post" — the deck is already rejected,
+  // this only adds the reason for the deck writer.
+  if (pendingReply?.kind === "reason" && text && !text.startsWith("/")) {
+    awaitingReply.delete(CHAT);
+    const reason = text.slice(0, 500);
+    const first = mutate((q) => {
+      let f = null;
+      for (const id of pendingReply.ids) {
+        const it = find(q, id);
+        if (!it) continue;
+        it.reason = reason;
+        (it.history ||= []).push({ status: it.status, at: new Date().toISOString(), reason });
+        f ??= it;
+      }
+      return f;
+    });
+    if (first) recordFeedback(first, "reject", reason, pendingReply.subject);
+    await say("Thanks — noted for the next ones.");
+    return;
+  }
+
   if (pendingReply && text && !text.startsWith("/")) {
     awaitingReply.delete(CHAT);
     const reason = text.slice(0, 500);
@@ -770,8 +823,9 @@ async function main() {
   console.log(`\n  🤖 @${me.username}`);
   console.log(`     token           ${describeSecret(config.botToken)}`);
   console.log(`     authorised chat ${CHAT}`);
-  console.log(`     ${describeMode("tiktok", config.publishers.tiktok)}`);
-  console.log(`     ${describeMode("instagram", config.publishers.instagram)}`);
+  for (const p of ["tiktok", "instagram"]) {
+    console.log(`     ${config.postPlatforms.includes(p) ? describeMode(p, config.publishers[p]) : `${p}: PAUSED (not in POST_PLATFORMS — not asked about, not posted)`}`);
+  }
   console.log(`     posting slots   ${config.schedule.times.length ? `${config.schedule.times.join(", ")} · ${config.schedule.perDay}/day per platform` : "none — publish on approval"}`);
   if (config.schedule.burst) console.log(`     burst day       ${config.schedule.burst.date}: ${config.schedule.burst.times.length} slots per platform (${config.schedule.burst.times[0]}–${config.schedule.burst.times.at(-1)})`);
   console.log(`     daily batch     ${config.dailyRunAt ? `at ${config.dailyRunAt}` : "off (use /generate)"}`);
@@ -824,9 +878,16 @@ async function main() {
   }
 }
 
-for (const sig of ["SIGINT", "SIGTERM"]) {
-  process.on(sig, () => { console.log("\n  stopping\n"); running = false; process.exit(0); });
+// Log WHICH signal stopped us. The bot has been killed from outside twice with
+// no trace; on Windows a closed console arrives as SIGHUP, Ctrl+Break as
+// SIGBREAK, Ctrl+C as SIGINT — naming it narrows the cause next time.
+for (const sig of ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"]) {
+  process.on(sig, () => { console.log(`\n  [${new Date().toISOString()}] stopping on ${sig}\n`); running = false; process.exit(0); });
 }
+process.on("exit", (code) => { try { appendFileSync(join(STATE_DIR, "launches.log"), `[${new Date().toISOString()}]   node pid=${process.pid} exit code=${code}\n`); } catch { /* best effort */ } });
+
+// Heartbeat: the last minute the bot was alive, for when it dies silently.
+setInterval(() => { try { writeFileSync(join(STATE_DIR, "heartbeat"), new Date().toISOString()); } catch { /* best effort */ } }, 60_000).unref?.();
 
 main().catch((err) => {
   console.error(`\n  ✗ ${tg.redact(err.message)}\n`);

@@ -243,12 +243,11 @@ test("bot delivers ONE album and ONE card per deck, and waits out a 429", async 
   const cards = sent.filter((s) => s.method === "sendMessage" && s.body.reply_markup?.inline_keyboard);
   assert.equal(cards.length, DECKS.length, "buttons arrive as a separate message — sendMediaGroup can't carry them");
   const labels = cards[0].body.reply_markup.inline_keyboard.flat().map((b) => b.text).join(" ");
-  assert.match(labels, /Approve both/);
-  assert.match(labels, /TikTok only/);
-  assert.match(labels, /Instagram only/);
-  assert.match(labels, /Reject/);
-  assert.match(labels, /Changes/);
-  assert.match(cards[0].body.text, /TikTok[\s\S]*Instagram/, "the card shows both platforms' captions");
+  // Just the question: two buttons, nothing else to decide (2026-09-27).
+  assert.equal(labels, "✅ Post it ❌ Don't post");
+  assert.match(cards[0].body.text, /^<b>OK to post to TikTok \+ Instagram\?<\/b>/);
+  assert.match(cards[0].body.text, /tt caption &amp; copy/, "shows the caption that will be posted");
+  assert.ok(!/hook|cta|🔗|📦|🗓/i.test(cards[0].body.text), "no hook ids, links, slide counts or schedules");
 
   for (const d of DECKS) {
     assert.equal(item(`${d}:tiktok`).status, "awaiting");
@@ -377,7 +376,7 @@ test("'TikTok only' schedules TikTok into a slot and closes Instagram without fe
   assert.equal(ig.status, "rejected");
   assert.match(ig.reason, /TikTok only/);
   assert.equal(readFileSync(join(sandbox, "FEEDBACK.md"), "utf8"), before, "a platform choice is not copy feedback");
-  assert.ok(messages().some((t) => /Approved[\s\S]*TikTok/.test(t)), "approval reports when it will post");
+  assert.ok(messages().some((t) => /^👍 Will post to TikTok at /.test(t)), "with posting times set, one line says when");
 });
 
 test("POSTS_PER_DAY holds: a second TikTok never lands on the same day", async () => {
@@ -536,6 +535,56 @@ test("/instagram <token>: checked with Instagram, stored, message deleted, Insta
 
   const bodies = JSON.stringify(sent.map((s) => s.body));
   assert.ok(!bodies.includes(IG_GOOD) && !bodies.includes(IG_BAD), "an Instagram token leaked into something the bot sent");
+});
+
+test("'Don't post' rejects on the tap, no reason required; a reply later is still recorded", async () => {
+  await stopBot();
+  const q = queue();
+  const base = q.items.find((i) => i.id === "t1-probe:tiktok");
+  q.items.push({ ...base, id: "t6-dont:tiktok", deckId: "t6-dont", status: "awaiting", history: [], reason: null });
+  writeFileSync(QUEUE_FILE(), JSON.stringify(q, null, 2));
+  sent = [];
+  startBot();
+  await settle(1500);
+
+  push(callback("R|t6-dont"));
+  await settle();
+  assert.equal(item("t6-dont:tiktok").status, "rejected", "rejected immediately — no reason demanded");
+  assert.ok(messages().some((t) => /Not posted\. .*Optional/.test(t)));
+  assert.ok(!sent.some((s) => s.body?.reply_markup?.force_reply), "no forced reply prompt");
+  assert.match(readFileSync(join(sandbox, "FEEDBACK.md"), "utf8"), /`t6-dont`.*\(no reason given\)/);
+
+  push(message("Too similar to the fridge one"));
+  await settle();
+  assert.equal(item("t6-dont:tiktok").reason, "Too similar to the fridge one");
+  assert.match(readFileSync(join(sandbox, "FEEDBACK.md"), "utf8"), /`t6-dont`.*Too similar to the fridge one/);
+});
+
+test("POST_PLATFORMS=tiktok: Instagram is never asked about or posted; approving posts TikTok with one line", async () => {
+  await stopBot();
+  const q = queue();
+  const base = q.items.find((i) => i.id === "t1-probe:tiktok");
+  const baseIg = q.items.find((i) => i.id === "t1-probe:instagram");
+  cpSync(join(sandbox, "out", "t1-probe"), join(sandbox, "out", "t7-tt"), { recursive: true });
+  q.items.push({ ...base, id: "t7-tt:tiktok", deckId: "t7-tt", status: "pending", history: [], reason: null, deliveredMessageId: null });
+  q.items.push({ ...baseIg, id: "t7-tt:instagram", deckId: "t7-tt", status: "pending", history: [], reason: null });
+  writeFileSync(QUEUE_FILE(), JSON.stringify(q, null, 2));
+  sent = [];
+  startBot({ POST_PLATFORMS: "tiktok" });
+  await settle(3500);
+
+  const card = sent.find((s) => s.method === "sendMessage" && /OK to post/.test(s.body.text || ""));
+  assert.ok(card, "the deck was asked about");
+  assert.match(card.body.text, /OK to post to TikTok\?/, "only TikTok is mentioned");
+  assert.equal(item("t7-tt:tiktok").status, "awaiting");
+  assert.equal(item("t7-tt:instagram").status, "pending", "Instagram is left alone");
+
+  sent = [];
+  push(callback("A|t7-tt|*"));
+  await settle(2000);
+  assert.notEqual(item("t7-tt:tiktok").status, "awaiting", "TikTok went to its publisher");
+  assert.equal(item("t7-tt:instagram").status, "pending", "approving didn't touch Instagram");
+  assert.ok(!sent.some((s) => s.method === "sendMessage" && /TRACKING|Approved/.test(s.body.text || "")), "no tracking rows or approval essays");
 });
 
 test("the bot token never appears in anything the bot says", async () => {

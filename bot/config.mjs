@@ -82,6 +82,12 @@ export const config = {
   // The bot runs scripts/daily.mjs once a day at this local time.
   // Unset = only on /generate.
   dailyRunAt: times(process.env.DAILY_RUN_AT)[0] || null,
+
+  // Which platforms the bot asks about and posts to. A platform left out is
+  // ignored end to end — not asked about, not handed off, not posted — so
+  // Instagram can sit out until its token exists (README: Open: Instagram)
+  // without sending hand-offs nobody acts on. Unset = every platform.
+  postPlatforms: String(process.env.POST_PLATFORMS || "tiktok,instagram").split(",").map((s) => s.trim()).filter(Boolean),
 };
 
 export function validate({ requirePublishing = false } = {}) {

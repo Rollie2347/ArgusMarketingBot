@@ -132,6 +132,24 @@ export async function deleteMessage(chatId, messageId) {
   catch (err) { console.warn(`  ! could not delete message: ${redact(err.message)}`); return null; }
 }
 
+/**
+ * A video (the slideshow exactly as it will post) with an HTML caption and,
+ * unlike an album, inline buttons on the same message. Bot API upload cap is
+ * 50 MB; ours are ~1 MB.
+ */
+export async function sendVideo(chatId, bytes, { caption = "", duration, width, height, reply_markup } = {}) {
+  const form = new FormData();
+  form.set("chat_id", String(chatId));
+  form.set("video", new Blob([bytes], { type: "video/mp4" }), "slideshow.mp4");
+  form.set("supports_streaming", "true");
+  if (caption) { form.set("caption", caption.slice(0, 1024)); form.set("parse_mode", "HTML"); }
+  if (duration) form.set("duration", String(duration));
+  if (width) form.set("width", String(width));
+  if (height) form.set("height", String(height));
+  if (reply_markup) form.set("reply_markup", JSON.stringify(reply_markup));
+  return call("sendVideo", form, { isForm: true, timeoutMs: 120_000 });
+}
+
 /** One photo from a local file (a publisher's screenshot). */
 export async function sendPhoto(chatId, bytes, caption = "") {
   const form = new FormData();

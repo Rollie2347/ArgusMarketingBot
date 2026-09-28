@@ -19,11 +19,20 @@ $bot  = Join-Path $root "bot\bot.mjs"
 $log  = Join-Path $root "bot\state\bot.log"
 New-Item -ItemType Directory -Force (Split-Path $log) | Out-Null
 
+# Every launch leaves a line here FIRST, before the mutex or anything else can
+# fail. The bot has twice been killed from outside (runner and node together,
+# exit 0xC000013A, cause not found — 2026-09-26 22:3x and 2026-09-27 18:29),
+# and the watchdog restarts after the second left no trace at all. This file
+# says whether the watchdog fired and how far each launch got.
+$launches = Join-Path $root "bot\state\launches.log"
+try { Add-Content -Path $launches -Encoding utf8 -Value "[$(Get-Date -Format s)] launch pid=$PID parent=$((Get-CimInstance Win32_Process -Filter "ProcessId=$PID").ParentProcessId)" } catch {}
+
 $mutex = New-Object System.Threading.Mutex($false, "Local\ArgusMarketingBot")
 if (-not $mutex.WaitOne(0)) {
-    Add-Content -Path $log -Encoding utf8 -Value "[$(Get-Date -Format s)] another run-bot.ps1 is already running - exiting"
+    try { Add-Content -Path $launches -Encoding utf8 -Value "[$(Get-Date -Format s)]   pid=${PID}: bot already running - exiting (normal for the watchdog)" } catch {}
     exit 0
 }
+try { Add-Content -Path $launches -Encoding utf8 -Value "[$(Get-Date -Format s)]   pid=${PID}: holds the mutex, starting the bot" } catch {}
 
 $node = (Get-Command node -ErrorAction SilentlyContinue).Source
 if (-not $node) { $node = "C:\Program Files\nodejs\node.exe" }
