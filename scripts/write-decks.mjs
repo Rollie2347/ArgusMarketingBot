@@ -180,11 +180,7 @@ export async function writeDecks({ count = parseInt(process.env.DECKS_PER_DAY ||
   const avoidHooks = recentHooks(now);
   const system = systemPrompt();
 
-  log(`  ✎ asking ${TEXT_MODEL} for ${count} deck(s)${avoidHooks.length ? `, avoiding ${avoidHooks.join(" ")}` : ""}`);
   const noBioLink = noBioLinkPlatforms(config);
-  const reply = await generateJson(batchPrompt({ count, avoidHooks, feedback: feedbackRows(), noBioLink }), { system });
-  const drafts = Array.isArray(reply?.decks) ? reply.decks.slice(0, count) : [];
-  if (!drafts.length) throw new Error(`${TEXT_MODEL} returned no decks`);
 
   // Batch number continues after any decks already written today (--force).
   let seq = already.length;
@@ -192,6 +188,33 @@ export async function writeDecks({ count = parseInt(process.env.DECKS_PER_DAY ||
   const written = [];
   const dropped = [];
 
+  // Three a day means three a day (Rollie, 2026-09-27): a deck that fails
+  // validation twice is dropped, so ask again for the shortfall — up to
+  // TOPUP_ROUNDS more times, never reusing a hook already used today.
+  const TOPUP_ROUNDS = 2;
+  for (let round = 0; round <= TOPUP_ROUNDS && written.length < count; round++) {
+    const want = count - written.length;
+    const avoid = [...new Set([...avoidHooks, ...usedHooks])];
+    log(`  ✎ ${round ? `top-up ${round}/${TOPUP_ROUNDS}: ` : ""}asking ${TEXT_MODEL} for ${want} deck(s)${avoid.length ? `, avoiding ${avoid.join(" ")}` : ""}`);
+    let drafts = [];
+    try {
+      const reply = await generateJson(batchPrompt({ count: want, avoidHooks: avoid, feedback: feedbackRows(), noBioLink }), { system });
+      drafts = Array.isArray(reply?.decks) ? reply.decks.slice(0, want) : [];
+    } catch (err) {
+      if (!round) throw err; // the first call failing is a real failure; a top-up failing just stops the top-up
+      log(`  ! top-up call failed: ${redact(err.message)}`);
+      break;
+    }
+    if (!drafts.length) {
+      if (!round) throw new Error(`${TEXT_MODEL} returned no decks`);
+      break;
+    }
+    await writeDrafts(drafts);
+  }
+  if (written.length < count) log(`  ⚠️ only ${written.length} of ${count} deck(s) passed validation today`);
+  return { written, dropped };
+
+  async function writeDrafts(drafts) {
   for (const draft of drafts) {
     let deck = finalize(draft, stamp, ++seq);
     let errors = check(deck, platforms, library, usedHooks, noBioLink);
@@ -224,8 +247,7 @@ export async function writeDecks({ count = parseInt(process.env.DECKS_PER_DAY ||
     written.push(deck.id);
     log(`  ✓ ${deck.id}  ${deck.angle}/${deck.hookId}  ${deck.slides.length} slides${dryRun ? "  (dry run — not written)" : ""}`);
   }
-
-  return { written, dropped };
+  }
 }
 
 /** The fields the model does not get to choose. */

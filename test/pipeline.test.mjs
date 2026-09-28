@@ -211,13 +211,33 @@ test("writer: a deck that fails twice is dropped, never written; recent hooks ar
   const { writeDecks } = await import("../scripts/write-decks.mjs");
   calls = [];
   const invented = goodDeck({ slug: "made-up", hookId: "PS-42" });
-  textReplies = [{ decks: [invented] }, { deck: invented }, { deck: invented }];
+  // batch, 2 repairs, then the top-up round gets nothing back and stops.
+  textReplies = [{ decks: [invented] }, { deck: invented }, { deck: invented }, { decks: [] }];
 
   const res = await writeDecks({ count: 1, now: DAY2, log: () => {} });
   assert.deepEqual(res.written, []);
   assert.equal(res.dropped.length, 1);
   assert.ok(!existsSync(join(data, "decks", "261004-1-made-up.json")));
   assert.match(calls[0].body.contents[0].parts[0].text, /Do NOT use these hook ids[^\n]*PS-06/, "yesterday's hook is off the table");
+});
+
+test("writer: a dropped deck is topped up, so the day still gets its full count", async () => {
+  const { writeDecks } = await import("../scripts/write-decks.mjs");
+  calls = [];
+  const DAY3 = new Date(2026, 9, 5, 7, 0);
+  const invented = goodDeck({ slug: "made-up", hookId: "PS-42" });
+  const good1 = goodDeck({ slug: "first-good", hookId: "PS-02", capabilities: ["read_text"] });
+  const good2 = goodDeck({ slug: "second-good", angle: "before-after", hookId: "BA-04", capabilities: ["diagnose_problem"] });
+  textReplies = [
+    { decks: [good1, invented] },   // asked for 2: one good, one bad
+    { deck: invented }, { deck: invented }, // both repairs fail → dropped
+    { decks: [good2] },             // top-up: asked for the 1 missing
+  ];
+  const res = await writeDecks({ count: 2, now: DAY3, log: () => {} });
+  assert.equal(res.written.length, 2, "full count despite the drop");
+  assert.equal(res.dropped.length, 1);
+  assert.match(calls[3].body.contents[0].parts[0].text, /^Write 1 new slideshow deck\./, "the top-up asks only for the shortfall");
+  assert.match(calls[3].body.contents[0].parts[0].text, /Do NOT use these hook ids[^\n]*PS-02/, "and not for a hook already used today");
 });
 
 /* ── images ─────────────────────────────────────────────────────────────── */
