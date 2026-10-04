@@ -10,8 +10,8 @@
   "_handle_note": "Set 2026-09-26 — the real TikTok and Instagram username is myargusai. Printed on every slide footer; regenerate if it changes.",
   "tiktokAccount": "personal",
   "_tiktokAccount_note": "Set 2026-09-26: a TikTok Business account couldn't be created, so TikTok is a PERSONAL account. Personal accounts can't link to App Store pages (RESEARCH §1.4), so TikTok copy must never say 'link in bio' — the TikTok CTA says to search “My Argus” on the App Store (it ranks #1 for that, 2026-09-26, but another app with the same name is #2 — hence 'look for the gold ring'). Validation enforces this for every deck. Upside: personal accounts get the full sound library. Set to \"business\" if that account ever exists.",
-  "tiktokFormat": "video",
-  "_tiktokFormat_note": "Set 2026-09-26: TikTok posts are made by a browser bot on TikTok’s website, which cannot create photo carousels (only the phone app can) — so the TikTok slides are posted as a slideshow VIDEO (lib/video.mjs) and the hook slide drops its SWIPE cue. \"carousel\" restores it.",
+  "tiktokFormat": "carousel",
+  "_tiktokFormat_note": "Set 2026-10-04: \"carousel\" — the browser bot posts the slides as a swipeable PHOTO post with a sound from TikTok’s picker (TikTok Studio’s upload page now has a Photos tab and an Add sound button; it was video-only on 2026-09-26). \"video\" goes back to a silent slideshow video (lib/video.mjs) and drops the hook slide’s SWIPE cue — the fallback if the Photos tab disappears. Slides are rendered per format, so decks made before a change keep their old cue.",
   "platforms": [
     "tiktok",
     "instagram"

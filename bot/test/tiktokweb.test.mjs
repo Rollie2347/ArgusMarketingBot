@@ -2,10 +2,11 @@
  * The TikTok browser bot, driving REAL Chrome against a local imitation of
  * TikTok Studio's upload page.
  *
- * What this proves: the bot's own logic — attach the video, wait for the
- * upload, replace the caption, turn the AI label on, refuse a private post,
- * press Post, recognise success, stop before Post on a dry run, and fail
- * loudly (with a screenshot) when logged out or when a step can't be done.
+ * What this proves: the bot's own logic — attach the photos (or the video),
+ * wait for the upload, replace the caption, add a sound, turn the AI label on,
+ * refuse a private post, press Post, recognise success, stop before Post on a
+ * dry run, and fail loudly (with a screenshot) when logged out or when a step
+ * can't be done.
  *
  * What it can NOT prove: that TikTok's real page looks like this imitation.
  * That is what the first DRY_RUN against the real site is for.
@@ -28,7 +29,16 @@ let pageMode = {};          // knobs for the fake page
 
 const PAGE = (m) => `<!doctype html><meta charset="utf-8"><title>TikTok Studio (fake)</title>
 <body style="font-family:sans-serif">
-<input type="file" accept="video/*" id="f">
+${m.noPhotos ? "" : `<button role="tab" aria-selected="${!m.photo}">Videos</button><button role="tab" aria-selected="${!!m.photo}">Photos</button>`}
+${m.photo
+    ? `<input type="file" accept="image/png,image/jpeg,image/webp" multiple id="f">`
+    : `<input type="file" accept="video/*" id="f">`}
+<!-- The real photo form (2026-10-04): "Add sound" opens a picker of rows with
+     a Use button each; once used, the row shows the title and "Replace". -->
+<div id="soundbox">${m.noSound ? "" : `<button id="addsound">Add sound</button>`}</div>
+<div class="MusicPickerView__root" id="picker" hidden>
+  ${(m.sounds || ["original sound - someone", "Track A", "Track B"]).map((t) => `<div role="listitem"><div class="MusicPanelMusicItem__infoBasicTitle">${t}</div><div>00:20 · Artist</div><button>Use</button></div>`).join("")}
+</div>
 <div data-e2e="caption_container"><div class="public-DraftEditor-content" contenteditable="true" id="cap">video.mp4</div></div>
 <div id="more-wrap">${m.noAiSwitch ? "" : `<span id="more">Show more</span>`}
   <div id="adv" hidden><div class="headline-wrapper"><span>AI-generated content</span><div class="headline-switch"><div class="Switch__root">
@@ -43,12 +53,21 @@ const PAGE = (m) => `<!doctype html><meta charset="utf-8"><title>TikTok Studio (
 <div id="modal" style="display:none"><button id="turnon">Turn on</button></div>
 <script>
   f.onchange = () => setTimeout(() => { post.disabled = false; }, 800);
+  let sound = null;
+  const addsound = document.getElementById("addsound");
+  if (addsound) addsound.onclick = () => { picker.hidden = false; };
+  for (const row of picker.querySelectorAll("[role=listitem]")) row.querySelector("button").onclick = () => {
+    sound = row.firstElementChild.innerText;
+    picker.hidden = true;
+    soundbox.innerHTML = "<span></span><button>Replace</button>";
+    soundbox.firstChild.textContent = sound;
+  };
   const more = document.getElementById("more");
   if (more) more.onclick = () => { adv.hidden = false; };
   ai.onclick = () => { modal.style.display = "block"; };
   turnon.onclick = () => { ai.setAttribute("aria-checked", "true"); ai.dataset.state = "checked"; modal.style.display = "none"; };
   post.onclick = async () => {
-    await fetch("/posted", { method: "POST", body: JSON.stringify({ caption: cap.innerText, ai: ai.getAttribute("aria-checked"), file: f.files[0] && f.files[0].name, size: f.files[0] && f.files[0].size }) });
+    await fetch("/posted", { method: "POST", body: JSON.stringify({ caption: cap.innerText, ai: ai.getAttribute("aria-checked"), file: f.files[0] && f.files[0].name, size: f.files[0] && f.files[0].size, files: [...f.files].map((x) => x.name), sound }) });
     location.href = "/tiktokstudio/content";
   };
 </script>`;
@@ -80,7 +99,7 @@ before(async () => {
     if (req.url.startsWith("/login")) { res.setHeader("content-type", "text/html"); res.end("<title>Log in</title>Log in to TikTok"); return; }
     if (req.url.startsWith("/tiktokstudio/upload")) {
       if (pageMode.loggedOut) { res.writeHead(302, { location: "/login?redirect=upload" }); res.end(); return; }
-      res.setHeader("content-type", "text/html"); res.end(PAGE(pageMode)); return;
+      res.setHeader("content-type", "text/html"); res.end(PAGE({ ...pageMode, photo: /[?&]tab=photo/.test(req.url) && !pageMode.noPhotos })); return;
     }
     if (req.url.startsWith("/tiktokstudio/content")) { res.setHeader("content-type", "text/html"); res.end("<title>Posts</title>Your video is being uploaded"); return; }
     res.writeHead(404); res.end();
@@ -90,8 +109,16 @@ before(async () => {
 
   Object.assign(process.env, { MARKETING_DATA_DIR: data, TIKTOK_UPLOAD_URL: `${base}/tiktokstudio/upload` });
   delete process.env.DRY_RUN;
+  // The format is read per post; the video tests below pin it, the carousel
+  // tests switch it.
+  process.env.TIKTOK_FORMAT = "video";
   ({ publish } = await import("../publishers/tiktokweb.mjs"));
 });
+
+const asCarousel = async (fn) => {
+  process.env.TIKTOK_FORMAT = "carousel";
+  try { return await fn(); } finally { process.env.TIKTOK_FORMAT = "video"; }
+};
 
 after(() => {
   server?.close();
@@ -157,5 +184,48 @@ test("a private default is refused", async (t) => {
   posted = null; pageMode = { private: true };
   const err = await publish(item()).catch((e) => e);
   assert.match(err.message, /private/);
+  assert.equal(posted, null);
+});
+
+test("carousel: photos attached in order, a sound picked, caption and AI label set, Post pressed", async (t) => {
+  if (skip) return t.skip(skip);
+  posted = null; pageMode = {};
+  const r = await asCarousel(() => publish(item()));
+  assert.equal(r.published, true);
+  assert.deepEqual(posted.files, ["01.jpg", "02.jpg"], "the slides themselves, not a video");
+  assert.equal(posted.sound, "Track A", "skips a stranger's \"original sound\" for the first real track");
+  assert.match(posted.caption, /^Open fridge\. No idea\./);
+  assert.equal(posted.ai, "true");
+  assert.match(r.note, /2-photo carousel with the sound “Track A”/);
+});
+
+test("carousel: the next post doesn't reuse the last sound", async (t) => {
+  if (skip) return t.skip(skip);
+  posted = null; pageMode = {};
+  await asCarousel(() => publish(item()));
+  assert.equal(posted.sound, "Track B");
+});
+
+test("carousel: only original sounds on offer → still posts with one", async (t) => {
+  if (skip) return t.skip(skip);
+  posted = null; pageMode = { sounds: ["original sound - a", "original sound - b"] };
+  await asCarousel(() => publish(item()));
+  assert.equal(posted.sound, "original sound - a");
+});
+
+test("carousel: no Add sound on the page → refuses to post silent", async (t) => {
+  if (skip) return t.skip(skip);
+  posted = null; pageMode = { noSound: true };
+  const err = await asCarousel(() => publish(item())).catch((e) => e);
+  assert.match(err.message, /adding a sound[\s\S]*Add sound button[\s\S]*TIKTOK_REQUIRE_SOUND=0/);
+  assert.ok(err.screenshot && existsSync(err.screenshot));
+  assert.equal(posted, null);
+});
+
+test("carousel: no Photos tab → says how to go back to video, nothing posted", async (t) => {
+  if (skip) return t.skip(skip);
+  posted = null; pageMode = { noPhotos: true };
+  const err = await asCarousel(() => publish(item())).catch((e) => e);
+  assert.match(err.message, /no Photos tab[\s\S]*tiktokFormat/);
   assert.equal(posted, null);
 });

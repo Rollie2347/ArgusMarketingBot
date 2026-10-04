@@ -37,7 +37,7 @@ DAILY_RUN_AT (or /generate)
     make-images.mjs   one photo for the hook slide (+ at most one more), cached by prompt
     make-slideshow    TikTok 9:16 + Instagram 4:5, PNG + JPEG
     enqueue           one queue item per deck per platform
-  → Telegram: ONE message per deck — the slideshow video exactly as it will post,
+  → Telegram: ONE message per deck — the slides as a video (TikTok gets them as swipeable photos + a sound),
       its caption, and "OK to post?"  ✅ Post it · ❌ Don't post
   → ✅ posts it right away (or at the next POST_TIMES slot, if set); one "✅ Posted" line back
   → ❌ is final on the tap; replying with a reason is optional and goes to FEEDBACK.md

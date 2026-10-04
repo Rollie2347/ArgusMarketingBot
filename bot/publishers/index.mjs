@@ -52,7 +52,7 @@ import * as tiktokweb from "./tiktokweb.mjs";
 // the public slide bucket). uploadpost stays available as the paid way to
 // automate TikTok too.
 // Fully automatic and free (2026-09-26): PUBLISH_TIKTOK=tiktokweb (a browser
-// bot on TikTok's website, posting a slideshow video — against TikTok's
+// bot on TikTok's website, posting a photo carousel with sound — against TikTok's
 // terms, accepted) and PUBLISH_INSTAGRAM=instagram once a token exists.
 const ADAPTERS = { manual, instagram, tiktok, uploadpost, telegram, tiktokweb };
 
@@ -65,7 +65,7 @@ export function getPublisher(name) {
 export function describeMode(platform, mode) {
   if (mode === "manual") return `${platform}: manual hand-off (approved asset, post by hand)`;
   if (mode === "telegram") return `${platform}: sent to Telegram at the slot, posted by hand`;
-  if (mode === "tiktokweb") return `${platform}: auto-posts via the browser bot (slideshow video)${process.env.DRY_RUN === "1" ? " (DRY_RUN)" : ""}`;
+  if (mode === "tiktokweb") return `${platform}: auto-posts via the browser bot (photo carousel + sound)${process.env.DRY_RUN === "1" ? " (DRY_RUN)" : ""}`;
   if (mode === "instagram") return `${platform}: auto-posts via the Instagram API${process.env.DRY_RUN === "1" ? " (DRY_RUN)" : ""}`;
   if (mode === platform) return `${platform}: API publishing ENABLED (unverified — watch the first run)`;
   if (mode === "uploadpost") return `${platform}: publishing via Upload-Post${process.env.DRY_RUN === "1" ? " (DRY_RUN)" : ""}`;

@@ -82,7 +82,7 @@ function topbar(slide, ctx) {
   const left = slide.eyebrow
     ? `<div class="eyebrow">${rich(slide.eyebrow)}</div>`
     : `<div class="mark"><span class="ring" style="--ring:44px"></span><span class="wordmark">Argus</span></div>`;
-  // No swipe cue when the slides become a video (TikTok via the browser bot).
+  // No swipe cue when the slides become a video (config tiktokFormat "video").
   const right = ctx.index === 0 && !ctx.noSwipe
     ? `<div class="swipe"><span>Swipe</span><span class="arrow">&rsaquo;</span></div>`
     : "";

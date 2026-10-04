@@ -143,7 +143,7 @@ function publishModeNote(platform) {
   if (mode === "manual") return "manual hand-off";
   if (mode === "telegram") return "sent to you here at its slot, you post it";
   if (mode === "instagram") return `auto-posts via the Instagram API${dry}`;
-  if (mode === "tiktokweb") return `auto-posts as a slideshow video (browser bot)${dry}`;
+  if (mode === "tiktokweb") return `auto-posts as a swipeable photo post with sound (browser bot)${dry}`;
   if (mode === "uploadpost") return `auto-posts via Upload-Post${dry}`;
   return mode;
 }
@@ -174,9 +174,11 @@ function askButtons(deckId) {
 async function deliverDeck(items) {
   const preview = items.find((i) => i.platform === "tiktok") || items[0];
 
-  // Best: the video TikTok will actually get — reviewing it IS reviewing the
-  // post. If it can't be built (no ffmpeg, a missing slide) fall back to the
-  // slide images, so a deck is never stuck undelivered.
+  // One message with buttons: the slides as a video. (An album of the photos
+  // can't carry buttons.) In carousel format TikTok gets these same slides as
+  // swipeable photos, plus a sound picked at posting time. If the video can't
+  // be built (no ffmpeg, a missing slide) fall back to the slide images, so a
+  // deck is never stuck undelivered.
   if (preview.platform === "tiktok" && config.publishers.tiktok === "tiktokweb") {
     try {
       const { makeSlideshowVideo } = await import("../lib/video.mjs");

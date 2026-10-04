@@ -5,8 +5,14 @@
  *
  * Why this and not TikTok's API: the API makes every post from an unaudited
  * app private (SELF_ONLY), and the audit isn't granted to one-person tools.
- * Why a VIDEO: TikTok's website cannot create photo carousels — only the
- * phone app can — so the slides go up as a slideshow video (lib/video.mjs).
+ *
+ * Two formats, from config.json `tiktokFormat` (or TIKTOK_FORMAT):
+ *   "carousel"  the slides as a swipeable PHOTO post, with a sound from
+ *               TikTok's own picker. The upload page grew a Photos tab and an
+ *               "Add sound" button — seen on the real page 2026-10-04; before
+ *               that the website was video-only.
+ *   "video"     the slides as a slideshow video (lib/video.mjs), no sound.
+ *               The fallback if TikTok takes the Photos tab away again.
  *
  * ⚠️ Against TikTok's terms (automated access). Accepted 2026-09-26 with that
  * known. See lib/browser.mjs for what keeps the footprint small.
@@ -16,17 +22,18 @@
  * screenshot of the page at that moment (the bot sends it to Telegram) — so
  * when TikTok changes the page, the fix starts from a picture, not a guess.
  *
- * Steps: open upload page → (logged-out? fail) → attach MP4 → wait for the
- * upload → replace the caption → AI-generated label ON (when the deck has
- * generated photos) → check it isn't private → Post → confirm → wait for
- * TikTok to accept it.
+ * Steps: open upload page → (logged-out? fail) → attach the photos (or the
+ * MP4) → wait for the upload → replace the caption → add a sound (carousel)
+ * → AI-generated label ON (when the deck has generated photos) → check it
+ * isn't private → Post → confirm → wait for TikTok to accept it.
  *
  * DRY_RUN=1 does everything except press Post, and returns a screenshot.
  */
 
-import { mkdirSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { STATE_DIR } from "../config.mjs";
+import { STATE_DIR, OUT_DIR } from "../config.mjs";
+import { CONFIG_FILE } from "../../lib/paths.mjs";
 import { openBrowser, pause, exclusive } from "../../lib/browser.mjs";
 import { makeSlideshowVideo } from "../../lib/video.mjs";
 
@@ -36,6 +43,19 @@ export const name = "tiktokweb";
 const UPLOAD_URL = process.env.TIKTOK_UPLOAD_URL || "https://www.tiktok.com/tiktokstudio/upload?from=webapp";
 const DRY_RUN = process.env.DRY_RUN === "1";
 const REQUIRE_AI_LABEL = process.env.TIKTOK_REQUIRE_AI_LABEL !== "0";
+const REQUIRE_SOUND = process.env.TIKTOK_REQUIRE_SOUND !== "0";
+// How many recent posts' sounds to avoid repeating.
+const SOUND_MEMORY = 10;
+const SOUNDS_FILE = join(STATE_DIR, "tiktok-sounds.json");
+
+function format() {
+  if (process.env.TIKTOK_FORMAT) return process.env.TIKTOK_FORMAT;
+  try { return JSON.parse(readFileSync(CONFIG_FILE, "utf8")).tiktokFormat || "carousel"; } catch { return "carousel"; }
+}
+
+function recentSounds() {
+  try { return JSON.parse(readFileSync(SOUNDS_FILE, "utf8")).slice(-SOUND_MEMORY); } catch { return []; }
+}
 
 class StepError extends Error {}
 
@@ -97,13 +117,73 @@ async function isOn(sw) {
   return sw.isChecked().catch(() => false);
 }
 
+/**
+ * Adds a sound from TikTok's picker ("Add sound" → the For You list, which is
+ * what TikTok recommends to this account right now — the website has no
+ * separate Trending tab). Picks the first track that isn't somebody's
+ * "original sound" (unvetted audio from a random post: could be speech, could
+ * be anything) and wasn't used in the last few posts; relaxes those in that
+ * order rather than post silent.
+ *
+ * @returns {Promise<string>} the sound's title
+ */
+async function addSound(page) {
+  const add = await firstVisible(page, [(p) => p.getByRole("button", { name: /^add sound$/i })], 15_000);
+  if (!add) throw new StepError("couldn't find the Add sound button");
+  await add.click();
+  const picker = page.locator(".MusicPickerView__root, [class*='MusicPicker']").first();
+  const rows = picker.locator('[role="listitem"]');
+  await rows.first().waitFor({ state: "visible", timeout: 20_000 }).catch(() => {});
+  await pause(page, 1200, 2200);
+
+  const titles = [];
+  for (const row of await rows.all()) {
+    const t = await row.locator('[class*="Title"]').first().innerText({ timeout: 2_000 }).catch(() => "");
+    titles.push((t || (await row.innerText({ timeout: 2_000 }).catch(() => "")).split("\n")[0]).trim());
+  }
+  if (!titles.some(Boolean)) throw new StepError("the sound picker opened with no sounds in it");
+  const recent = recentSounds();
+  const original = (t) => /^original sound\b/i.test(t);
+  const want = [
+    (t) => t && !original(t) && !recent.includes(t),
+    (t) => t && !original(t),
+    (t) => t && !recent.includes(t),
+    (t) => t,
+  ];
+  let pick = -1;
+  for (const ok of want) { pick = titles.findIndex(ok); if (pick >= 0) break; }
+  const title = titles[pick];
+
+  await rows.nth(pick).getByRole("button", { name: /^use$/i }).click();
+  // Chosen = the picker closes and the Sound row offers "Replace" instead of "Add sound".
+  const replaced = await firstVisible(page, [(p) => p.getByRole("button", { name: /^replace$/i })], 15_000);
+  if (!replaced) throw new StepError(`picked the sound "${title}" but the form didn't take it`);
+  return title;
+}
+
+function rememberSound(title) {
+  try { mkdirSync(STATE_DIR, { recursive: true }); writeFileSync(SOUNDS_FILE, JSON.stringify([...recentSounds(), title].slice(-SOUND_MEMORY), null, 2), "utf8"); } catch { /* only costs a repeat */ }
+}
+
 export async function publish(item) {
   // One browser job at a time (a /tiktoklogin may be running).
   return exclusive(() => publishNow(item));
 }
 
 async function publishNow(item) {
-  const video = await makeSlideshowVideo(item);
+  const carousel = format() !== "video";
+  let video = null, photos = [];
+  if (carousel) {
+    // JPEG: the Photos tab takes JPG/PNG/WebP, and the JPEGs are a tenth the size.
+    const dir = join(OUT_DIR, item.deckId, item.platform);
+    photos = (item.jpgFiles?.length ? item.jpgFiles : item.slideFiles).map((f) => join(dir, f));
+    for (const f of photos) if (!existsSync(f)) throw new Error(`missing slide ${f}`);
+    if (photos.length > 35) throw new Error(`TikTok takes at most 35 photos per post — this deck has ${photos.length}`);
+  } else {
+    video = await makeSlideshowVideo(item);
+  }
+  const what = carousel ? `${photos.length}-photo carousel` : `${video.seconds}s slideshow video`;
+  let sound = null;
   const caption = `${item.caption}\n\n${item.hashtags.join(" ")}`.trim();
 
   const ctx = await openBrowser();
@@ -111,23 +191,36 @@ async function publishNow(item) {
   page.setDefaultTimeout(30_000);
   let step = "opening the upload page";
   try {
-    await page.goto(UPLOAD_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await page.goto(carousel ? `${UPLOAD_URL}${UPLOAD_URL.includes("?") ? "&" : "?"}tab=photo` : UPLOAD_URL, { waitUntil: "domcontentloaded", timeout: 60_000 });
     await pause(page, 2500, 4000);
     if (/\/login/.test(page.url())) {
       throw new StepError("TikTok isn't logged in on the posting browser — send /tiktoklogin here and scan the QR code with the TikTok app, then Retry.");
     }
 
-    step = "attaching the video";
-    const input = page.locator('input[type="file"]').first();
-    await input.waitFor({ state: "attached", timeout: 45_000 });
-    await input.setInputFiles(video.path);
+    if (carousel) {
+      step = "switching to the Photos tab";
+      // ?tab=photo normally lands on it; the click covers a page that ignores it.
+      const tab = await firstVisible(page, [(p) => p.getByRole("tab", { name: /^photos$/i })], 30_000);
+      if (!tab) throw new StepError('the upload page has no Photos tab — TikTok may have removed photo posts from the website. Set "tiktokFormat": "video" in config.json to go back to slideshow videos.');
+      if ((await tab.getAttribute("aria-selected").catch(() => null)) !== "true") { await tab.click(); await pause(page); }
+
+      step = "attaching the photos";
+      const input = page.locator('input[type="file"][accept*="image"]').first();
+      await input.waitFor({ state: "attached", timeout: 45_000 });
+      await input.setInputFiles(photos);
+    } else {
+      step = "attaching the video";
+      const input = page.locator('input[type="file"]').first();
+      await input.waitFor({ state: "attached", timeout: 45_000 });
+      await input.setInputFiles(video.path);
+    }
 
     step = "waiting for the upload to finish";
     const post = await firstVisible(page, [
       (p) => p.locator('button[data-e2e="post_video_button"]'),
       (p) => p.getByRole("button", { name: /^post$/i }),
     ], 90_000);
-    if (!post) throw new StepError("the Post button never appeared after attaching the video");
+    if (!post) throw new StepError(`the Post button never appeared after attaching the ${carousel ? "photos" : "video"}`);
     const uploadUntil = Date.now() + 5 * 60_000;
     while (Date.now() < uploadUntil) {
       const disabled = (await post.isDisabled().catch(() => true)) ||
@@ -170,6 +263,19 @@ async function publishNow(item) {
     const want = body.split("\n")[0].slice(0, 30).replace(/\s+/g, " ");
     if (!typed.includes(want)) throw new StepError(`the caption didn't take (expected it to start "${want}")`);
 
+    if (carousel) {
+      step = "adding a sound";
+      await clearPopups(page);
+      try {
+        sound = await addSound(page);
+      } catch (err) {
+        if (REQUIRE_SOUND) throw new StepError(`${err.message.split("\n")[0]} — set TIKTOK_REQUIRE_SOUND=0 to post without one`);
+        // Don't leave the picker open over the rest of the form.
+        await page.keyboard.press("Escape").catch(() => {});
+      }
+      await pause(page);
+    }
+
     if (item.aiImages) {
       step = "turning on the AI-generated content label";
       await clearPopups(page);
@@ -209,7 +315,7 @@ async function publishNow(item) {
     if (DRY_RUN) {
       const file = await shot(page, "dry-run");
       return { published: false, postId: null, url: null, screenshot: file,
-        note: `DRY RUN — video ${video.seconds}s uploaded, caption and settings filled in, stopped before Post. Screenshot attached: check it looks right.` };
+        note: `DRY RUN — ${what} uploaded${sound ? `, sound “${sound}” added` : ""}, caption and settings filled in, stopped before Post. Screenshot attached: check it looks right.` };
     }
 
     step = "pressing Post";
@@ -228,15 +334,16 @@ async function publishNow(item) {
     step = "waiting for TikTok to accept the post";
     const done = await Promise.race([
       page.waitForURL(/tiktokstudio\/content|\/manage|\/creator/i, { timeout: 120_000 }).then(() => "moved"),
-      page.getByText(/(your video (has been|is being) (uploaded|posted|published)|video published|posted successfully)/i).first()
+      page.getByText(/(your (video|photos?|post) (has|have|is|are) (been |being )?(uploaded|posted|published)|(video|photos?|post) published|posted successfully)/i).first()
         .waitFor({ timeout: 120_000 }).then(() => "toast"),
       ...(errorAlreadyShown ? [] : [page.getByText(errorText).first().waitFor({ timeout: 120_000 }).then(() => "error")]),
     ]).catch(() => null);
     if (done === "error") throw new StepError("TikTok showed an error after Post — CHECK THE ACCOUNT before retrying");
     if (!done) throw new StepError("no confirmation from TikTok within 2 minutes after Post — CHECK THE ACCOUNT before retrying, it may have posted");
 
+    if (sound) rememberSound(sound);
     return { published: true, postId: null, url: null,
-      note: `Posted to TikTok as a ${video.seconds}s slideshow video via the website. Add the link with /posted when you see it.` };
+      note: `Posted to TikTok as a ${what}${sound ? ` with the sound “${sound}”` : ""} via the website. Add the link with /posted when you see it.` };
   } catch (err) {
     const e = new Error(`tiktok web (${step}): ${err instanceof StepError ? err.message : err.message.split("\n")[0]}`);
     e.screenshot = await shot(page, "failed");

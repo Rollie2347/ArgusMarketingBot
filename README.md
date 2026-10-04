@@ -28,7 +28,7 @@ node bot/bot.mjs                            # deliver to Telegram, wait for Appr
 
 | Platform | Status (2026-09-27) |
 |---|---|
-| **TikTok** | **Automatic, verified live.** `PUBLISH_TIKTOK=tiktokweb`: a browser bot on this PC posts each deck to TikTok's website as a slideshow video (the site can't make photo carousels). Logged out → the bot alerts; send `/tiktoklogin` in Telegram and scan the QR. |
+| **TikTok** | **Automatic, verified live.** `PUBLISH_TIKTOK=tiktokweb`: a browser bot on this PC posts each deck to TikTok's website as a swipeable photo post with a sound from TikTok's picker (`config.json` `tiktokFormat: "carousel"`; `"video"` falls back to a silent slideshow video). Logged out → the bot alerts; send `/tiktoklogin` in Telegram and scan the QR. |
 | **Instagram** | **⚠️ STILL MANUAL — NEEDS FIXING.** Hand-offs to Telegram (`telegram` publisher): the slides arrive at each slot and have to be posted by hand. See below. |
 
 ## ⚠️ Open: Instagram automatic posting (TO FIX)
