@@ -74,6 +74,19 @@ it's against Instagram's terms), or Upload-Post (`bot/publishers/uploadpost.mjs`
 | `FEEDBACK.md` | Written by the bot. Every rejection and change request, with its reason. **The input to the next batch's `HOOKS.md`.** |
 | `out/` | Generated. Safe to delete and regenerate. |
 
+## Where this lives
+
+This folder is `marketing/` in the Argus repo (`Rollie2347/Argus`) and is also published on its own
+as [`Rollie2347/ArgusMarketingBot`](https://github.com/Rollie2347/ArgusMarketingBot) — **public**.
+It runs standalone; the one check that needs the app (`backend/agents.js`) skips itself when the
+backend tree is absent. Commit in the Argus repo, then publish from the Argus repo root:
+
+```bash
+git subtree push --prefix=marketing marketingbot main   # remote: https://github.com/Rollie2347/ArgusMarketingBot.git
+```
+
+Secrets (`bot/.env`) and the queue/browser profile (`bot/state/`) are gitignored and must stay that way.
+
 Attribution lives in `backend/server.js` as `GET /g/:slug` — built and tested, not yet deployed.
 See `TRACKING.md` §Layer 1 for what it does and the four steps to turn it on.
 

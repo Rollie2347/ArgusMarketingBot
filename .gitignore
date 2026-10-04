@@ -10,3 +10,12 @@ assets/generated/
 # <yymmdd>-<n>-<slug>. The operational record of them is the approval queue;
 # locally they are scratch. Hand-written decks (01-…, 02-…) stay tracked.
 decks/[0-9][0-9][0-9][0-9][0-9][0-9]-*.json
+
+# This folder is also published on its own (github.com/Rollie2347/ArgusMarketingBot),
+# where the Argus repo's root .gitignore doesn't apply — so the basics are
+# repeated here.
+node_modules/
+.env
+.env.txt
+*.log
+bot/state/
