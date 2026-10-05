@@ -62,9 +62,9 @@ function goodDeck(overrides = {}) {
       { type: "quote", headline: "What that sounds like", turns: [{ who: "you", text: "Twenty minutes. What can I make?" }, { who: "argus", text: "Eggs, that lemon and the parsley — a herb omelette. Fifteen minutes." }] },
       { type: "split", headline: "The difference", before: "Open app. Type. Filter. Scroll. Order takeout.", after: "Open fridge. Ask. Cook." },
       { type: "body", step: "WORTH KNOWING", headline: "No account to make", body: "No sign-up, no password. Delete everything from inside the app whenever you like." },
-      { type: "cta", headline: "Argus — free on iPhone", body: "No sign-up.", pill: { tiktok: "Search “My Argus” · App Store", instagram: "Link in bio" } },
+      { type: "cta", headline: "Argus — free on iPhone", body: "No sign-up.", pill: { tiktok: "Search “My Argus” · App Store", instagram: "Search “My Argus” · App Store" } },
     ],
-    caption: { tiktok: "Stop typing ingredients into recipe apps. Point the camera, ask. Free on iPhone — search “My Argus” on the App Store.", instagram: "The fridge has everything. Point, ask, cook.\n\nFree on iPhone — link in bio.\n\nSend this to whoever asks what's for dinner." },
+    caption: { tiktok: "Stop typing ingredients into recipe apps. Point the camera, ask. Free on iPhone — search “My Argus” on the App Store.", instagram: "The fridge has everything. Point, ask, cook.\n\nFree on iPhone — search “My Argus” on the App Store.\n\nSend this to whoever asks what's for dinner." },
     hashtags: { tiktok: ["whatsfordinner", "cookingtips", "iphoneapps"], instagram: ["whatsfordinner", "weeknightdinner", "iphoneapp"] },
     ...overrides,
   };
@@ -290,4 +290,17 @@ test("a generated deck with a photo renders PNG + JPEG for both platforms", () =
   assert.match(html, /class="bgimg"/, "the hook slide carries its photo");
   const manifest = JSON.parse(readFileSync(join(data, "out", "261003-1-typing-ingredients", "manifest.json"), "utf8"));
   assert.equal(manifest.aiImages, true);
+});
+
+test("Instagram with no bio link: 'link in bio' is refused there too", async () => {
+  const { validateDeck, noBioLinkPlatforms } = await import("../lib/validate.mjs");
+  assert.deepEqual(noBioLinkPlatforms({ tiktokAccount: "personal", instagramBioLink: false }), ["tiktok", "instagram"]);
+  assert.deepEqual(noBioLinkPlatforms({ tiktokAccount: "personal" }), ["tiktok"]);
+  const both = ["tiktok", "instagram"];
+  const opts = { noBioLink: ["tiktok", "instagram"] };
+  const deck = (pillIg, captionIg) => ({ ...goodDeck({ slides: goodDeck().slides.map((x) => (x.type === "cta" ? { ...x, pill: { tiktok: "Search “My Argus”", instagram: pillIg } } : x)), caption: { ...goodDeck().caption, instagram: captionIg } }), ct: "ps-2609" });
+  const bad = validateDeck(deck("Link in bio", "Free on iPhone — link in bio."), both, opts);
+  assert.ok(bad.some((e) => /instagram slides point to a bio link/.test(e)));
+  assert.ok(bad.some((e) => /caption\.instagram points to a bio link/.test(e)));
+  assert.deepEqual(validateDeck(deck("Search “My Argus”", "Free on iPhone — search “My Argus” on the App Store."), both, opts), []);
 });

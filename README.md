@@ -26,12 +26,20 @@ node bot/bot.mjs                            # deliver to Telegram, wait for Appr
 **Nothing publishes without an approval in Telegram.** What happens after approval, per platform
 (`bot/README.md` has the detail):
 
-| Platform | Status (2026-09-27) |
+| Platform | Status (2026-10-04) |
 |---|---|
 | **TikTok** | **Automatic, verified live.** `PUBLISH_TIKTOK=tiktokweb`: a browser bot on this PC posts each deck to TikTok's website as a swipeable photo post with a sound from TikTok's picker (`config.json` `tiktokFormat: "carousel"`; `"video"` falls back to a silent slideshow video). Logged out → the bot alerts; send `/tiktoklogin` in Telegram and scan the QR. |
-| **Instagram** | **⚠️ STILL MANUAL — NEEDS FIXING.** Hand-offs to Telegram (`telegram` publisher): the slides arrive at each slot and have to be posted by hand. See below. |
+| **Instagram** | **Automatic, verified live.** `PUBLISH_INSTAGRAM=instagramweb`: a browser bot posts each deck through instagram.com's Create dialog from a personal account, as a swipeable 4:5 carousel whose slides are short clips over a track from `assets/music/` (`config.json` `instagramFormat: "carousel-sound"`). Logged out → the bot alerts; run `npm run instagram-login` on the PC. |
 
-## ⚠️ Open: Instagram automatic posting (TO FIX)
+## Standing rule (Rollie, 2026-10-04)
+
+**Three posts a day, every one with scrollable slides and audio, posted to both TikTok and
+Instagram.** In settings: `DECKS_PER_DAY=3`, `POST_PLATFORMS=tiktok,instagram`,
+`tiktokFormat: "carousel"` (photo carousel + a sound from TikTok's picker) and
+`instagramFormat: "carousel-sound"` (carousel of per-slide clips over a track from `assets/music/`).
+Don't switch either platform to a format that drops the swiping or the sound.
+
+## Instagram: why it's a browser bot (history)
 
 Everything on our side is built and tested — `bot/publishers/instagram.mjs` (Instagram API with
 Instagram Login, free, allowed by Meta), the public slide bucket (`lib/gcs.mjs`,
@@ -48,9 +56,14 @@ missing is the token**, and getting it has been difficult (2026-09-26/27):
   "API setup with Instagram login" → Add account (or add as Instagram Tester and accept the invite
   in the Instagram app) → Generate token → send `/instagram <token>` to the bot.
 
-Next step: find out which screen blocks it (a screenshot of it) and get past it. Fallbacks if Meta
-won't cooperate: a browser bot for instagram.com like the TikTok one (carousels work there, but
-it's against Instagram's terms), or Upload-Post (`bot/publishers/uploadpost.mjs`, paid).
+**2026-10-04: Instagram wouldn't let `myargusai` become a Professional account, so the API route is
+shelved.** The replacement is `bot/publishers/instagramweb.mjs`: a browser bot on instagram.com like
+the TikTok one (against Instagram's terms). Instagram's website has no music picker at any step, so
+sound is mixed into the files (`lib/video.mjs`, `lib/music.mjs`, tracks in `assets/music/`).
+Live-verified the same day in all three formats: silent photo carousel, Reel with music, and the
+current swipeable carousel of per-slide clips with music. Upload-Post
+(`bot/publishers/uploadpost.mjs`, paid) uses the same API and needs a Professional account too, so
+it is not a way round this.
 
 ## Files
 

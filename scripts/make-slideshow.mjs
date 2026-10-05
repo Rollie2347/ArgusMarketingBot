@@ -32,7 +32,7 @@ import { join, basename } from "node:path";
 import { tmpdir } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
 
-import { renderPage, PLATFORMS, esc, forPlatform } from "../templates/render.mjs";
+import { renderPage, PLATFORMS, esc, forPlatform, frameFor } from "../templates/render.mjs";
 import { validateDeck, noBioLinkPlatforms } from "../lib/validate.mjs";
 import { DECKS_DIR as DECKS, OUT_DIR as OUT, ASSETS_DIR, CONFIG_FILE } from "../lib/paths.mjs";
 
@@ -455,7 +455,7 @@ try {
     mkdirSync(deckOut, { recursive: true });
 
     for (const platform of platforms) {
-      const { w, h } = PLATFORMS[platform];
+      const { w, h, layout } = frameFor(platform, config);
       const dir = join(deckOut, platform);
       const htmlDir = join(dir, "_html");
       rmSync(dir, { recursive: true, force: true });
@@ -472,7 +472,8 @@ try {
           deckId: deck.id,
           safe: OPTS.safe,
           imageUrl: slide.image ? pathToFileURL(imagePath(deck, slide)).href : null,
-          noSwipe: platform === "tiktok" && config.tiktokFormat === "video",
+          layout,
+          noSwipe: (platform === "tiktok" && config.tiktokFormat === "video") || (platform === "instagram" && config.instagramFormat === "reel"),
         });
         const htmlPath = join(htmlDir, `${n}.html`);
         const pngPath = join(dir, `${n}.png`);

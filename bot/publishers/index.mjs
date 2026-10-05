@@ -46,6 +46,7 @@ import * as tiktok from "./tiktok.mjs";
 import * as uploadpost from "./uploadpost.mjs";
 import * as telegram from "./telegram.mjs";
 import * as tiktokweb from "./tiktokweb.mjs";
+import * as instagramweb from "./instagramweb.mjs";
 
 // The free setup (2026-09-26): PUBLISH_TIKTOK=telegram (hand-off to the
 // phone) and PUBLISH_INSTAGRAM=instagram (instagram.mjs, Instagram Login +
@@ -54,7 +55,9 @@ import * as tiktokweb from "./tiktokweb.mjs";
 // Fully automatic and free (2026-09-26): PUBLISH_TIKTOK=tiktokweb (a browser
 // bot on TikTok's website, posting a photo carousel with sound — against TikTok's
 // terms, accepted) and PUBLISH_INSTAGRAM=instagram once a token exists.
-const ADAPTERS = { manual, instagram, tiktok, uploadpost, telegram, tiktokweb };
+// No Professional account, so no token (2026-10-04): PUBLISH_INSTAGRAM=instagramweb,
+// the same kind of browser bot on instagram.com (against Instagram's terms).
+const ADAPTERS = { manual, instagram, tiktok, uploadpost, telegram, tiktokweb, instagramweb };
 
 export function getPublisher(name) {
   const a = ADAPTERS[name];
@@ -66,6 +69,7 @@ export function describeMode(platform, mode) {
   if (mode === "manual") return `${platform}: manual hand-off (approved asset, post by hand)`;
   if (mode === "telegram") return `${platform}: sent to Telegram at the slot, posted by hand`;
   if (mode === "tiktokweb") return `${platform}: auto-posts via the browser bot (photo carousel + sound)${process.env.DRY_RUN === "1" ? " (DRY_RUN)" : ""}`;
+  if (mode === "instagramweb") return `${platform}: auto-posts via the browser bot (config.json instagramFormat: swipeable carousel with music, reel, or silent carousel)${process.env.DRY_RUN === "1" ? " (DRY_RUN)" : ""}`;
   if (mode === "instagram") return `${platform}: auto-posts via the Instagram API${process.env.DRY_RUN === "1" ? " (DRY_RUN)" : ""}`;
   if (mode === platform) return `${platform}: API publishing ENABLED (unverified — watch the first run)`;
   if (mode === "uploadpost") return `${platform}: publishing via Upload-Post${process.env.DRY_RUN === "1" ? " (DRY_RUN)" : ""}`;

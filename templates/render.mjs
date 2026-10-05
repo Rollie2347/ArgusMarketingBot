@@ -24,6 +24,31 @@ export const PLATFORMS = {
   instagram: { w: 1080, h: 1350, label: "Instagram carousel 4:5" },
 };
 
+/**
+ * The frame a platform's slides are rendered at. Instagram is 4:5 as a
+ * carousel but 9:16 when the deck is posted as a Reel (config.json
+ * `instagramFormat: "reel"`) — a Reel fills the phone screen, and its
+ * caption and buttons cover the same areas TikTok's do.
+ */
+export function frameFor(platform, config = {}) {
+  if (platform === "instagram" && config.instagramFormat === "reel") return { w: PLATFORMS.tiktok.w, h: PLATFORMS.tiktok.h, layout: "tiktok" };
+  return { w: PLATFORMS[platform].w, h: PLATFORMS[platform].h, layout: platform };
+}
+
+/** Width and height of a rendered slide, read from the file (JPEG or PNG). */
+export function slideSize(file) {
+  const b = readFileSync(file);
+  if (b.readUInt32BE(0) === 0x89504e47) return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) };
+  // JPEG: walk the segments to the start-of-frame marker.
+  for (let i = 2; i + 9 < b.length;) {
+    if (b[i] !== 0xff) { i++; continue; }
+    const m = b[i + 1];
+    if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return { w: b.readUInt16BE(i + 7), h: b.readUInt16BE(i + 5) };
+    i += 2 + b.readUInt16BE(i + 2);
+  }
+  throw new Error(`can't read the size of ${file}`);
+}
+
 /** Cached so a 100-slide batch reads the stylesheet once. */
 let THEME = null;
 function theme() {
@@ -82,7 +107,8 @@ function topbar(slide, ctx) {
   const left = slide.eyebrow
     ? `<div class="eyebrow">${rich(slide.eyebrow)}</div>`
     : `<div class="mark"><span class="ring" style="--ring:44px"></span><span class="wordmark">Argus</span></div>`;
-  // No swipe cue when the slides become a video (config tiktokFormat "video").
+  // No swipe cue when the slides become a video (config tiktokFormat "video",
+  // instagramFormat "reel").
   const right = ctx.index === 0 && !ctx.noSwipe
     ? `<div class="swipe"><span>Swipe</span><span class="arrow">&rsaquo;</span></div>`
     : "";
@@ -215,7 +241,7 @@ export function renderPage(slide, ctx) {
   if (!PLATFORMS[ctx.platform]) throw new Error(`unknown platform "${ctx.platform}"`);
   slide = forPlatform(slide, ctx.platform);
   return `<!doctype html>
-<html lang="en" data-platform="${ctx.platform}"${ctx.safe ? ' data-safe="1"' : ""}${ctx.imageUrl ? ' data-image="1"' : ""}>
+<html lang="en" data-platform="${ctx.layout || ctx.platform}"${ctx.safe ? ' data-safe="1"' : ""}${ctx.imageUrl ? ' data-image="1"' : ""}>
 <head>
 <meta charset="utf-8">
 <title>${esc(ctx.deckId || "argus")} ${ctx.index + 1}</title>

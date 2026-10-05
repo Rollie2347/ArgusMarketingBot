@@ -10,8 +10,12 @@
   "_handle_note": "Set 2026-09-26 — the real TikTok and Instagram username is myargusai. Printed on every slide footer; regenerate if it changes.",
   "tiktokAccount": "personal",
   "_tiktokAccount_note": "Set 2026-09-26: a TikTok Business account couldn't be created, so TikTok is a PERSONAL account. Personal accounts can't link to App Store pages (RESEARCH §1.4), so TikTok copy must never say 'link in bio' — the TikTok CTA says to search “My Argus” on the App Store (it ranks #1 for that, 2026-09-26, but another app with the same name is #2 — hence 'look for the gold ring'). Validation enforces this for every deck. Upside: personal accounts get the full sound library. Set to \"business\" if that account ever exists.",
+  "instagramBioLink": false,
+  "_instagramBioLink_note": "Set 2026-10-04: the Instagram profile has no link in its bio, so Instagram copy must never say 'link in bio' — it says to search “My Argus” on the App Store, like TikTok. Validation enforces this for every deck. Remove (or set true) once the bio has the link.",
   "tiktokFormat": "carousel",
   "_tiktokFormat_note": "Set 2026-10-04: \"carousel\" — the browser bot posts the slides as a swipeable PHOTO post with a sound from TikTok’s picker (TikTok Studio’s upload page now has a Photos tab and an Add sound button; it was video-only on 2026-09-26). \"video\" goes back to a silent slideshow video (lib/video.mjs) and drops the hook slide’s SWIPE cue — the fallback if the Photos tab disappears. Slides are rendered per format, so decks made before a change keep their old cue.",
+  "instagramFormat": "carousel-sound",
+  "_instagramFormat_note": "Set 2026-10-04: \"carousel-sound\" — swipeable AND with sound: a 4:5 carousel whose slides are 8-second video clips of each slide over a music track from assets/music/ (Instagram's website has no music picker — checked on the real page — but a carousel may hold videos, and a video carries its own audio). Rollie's standing rule: every post has scrollable slides and audio. \"reel\" is one 9:16 slideshow video with the music (sound, not swipeable); \"carousel\" is a silent swipeable 4:5 photo post. Slides are rendered per format, so decks made before a change keep their old size.",
   "platforms": [
     "tiktok",
     "instagram"

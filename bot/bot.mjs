@@ -144,6 +144,7 @@ function publishModeNote(platform) {
   if (mode === "telegram") return "sent to you here at its slot, you post it";
   if (mode === "instagram") return `auto-posts via the Instagram API${dry}`;
   if (mode === "tiktokweb") return `auto-posts as a swipeable photo post with sound (browser bot)${dry}`;
+  if (mode === "instagramweb") return `auto-posts as a swipeable carousel with music (browser bot)${dry}`;
   if (mode === "uploadpost") return `auto-posts via Upload-Post${dry}`;
   return mode;
 }
@@ -743,8 +744,14 @@ async function onMessage(msg) {
         `Instagram is <b>${esc(publishModeNote("instagram"))}</b>.`,
         "",
         "To make it automatic, send <code>/instagram YOUR_TOKEN</code> — the token from your Meta app (Instagram → API setup with Instagram login → Generate token). I check it with Instagram, save it, delete your message, and switch Instagram to automatic.",
+        "No Professional account? <code>/instagram web</code> posts through instagram.com instead (browser bot, like TikTok) — log the posting browser in first with <code>npm run instagram-login</code> on the PC.",
         "<code>/instagram off</code> goes back to sending you the post by hand.",
       ].join("\n"));
+      return;
+    }
+    if (arg === "web") {
+      setPublisher("instagram", "instagramweb");
+      await say(`Instagram now <b>${esc(publishModeNote("instagram"))}</b>.${config.postPlatforms.includes("instagram") ? "" : "\n\n⚠️ Instagram is still paused: add it to POST_PLATFORMS in bot/.env and restart me."}`);
       return;
     }
     if (arg === "off") {
@@ -781,7 +788,8 @@ async function onMessage(msg) {
       "/pending — deliver anything not yet sent",
       "/posted <id> <url> — record a manually posted item",
       "/tiktoklogin — log TikTok in again (QR code to scan)",
-      "/instagram <token> — make Instagram automatic",
+      "/instagram <token> — make Instagram automatic (API, needs a Professional account)",
+      "/instagram web — make Instagram automatic through the website (no Professional account)",
       "",
       "Approve / Reject / Changes are the buttons on each deck.",
     ].join("\n"));

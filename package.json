@@ -7,7 +7,8 @@
     "test": "node --test \"bot/test/*.test.mjs\" \"test/*.test.mjs\"",
     "bot": "node bot/bot.mjs",
     "daily": "node scripts/daily.mjs",
-    "tiktok-login": "node scripts/tiktok-login.mjs"
+    "tiktok-login": "node scripts/tiktok-login.mjs",
+    "instagram-login": "node scripts/instagram-login.mjs"
   },
   "dependencies": {
     "playwright-core": "^1.56.0"
