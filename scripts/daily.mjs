@@ -15,7 +15,10 @@
  * Idempotent by design: a batch that died halfway (network, a Chrome crash)
  * is finished by running this again — the writer sees today's decks already
  * exist, images already generated are reused, and enqueue skips anything
- * already in the queue.
+ * already in the queue. A deck that is already in the queue is not rendered
+ * again: rendering deletes and rewrites its slide files, and by then the deck
+ * may be mid-publish (2026-10-07: a re-run did exactly that and five posts
+ * failed on missing slides).
  *
  * The last line of output is `DAILY_RESULT {json}` — the bot parses that
  * rather than scraping the human-readable log.
@@ -23,10 +26,11 @@
 
 import "../lib/env.mjs";
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
-import { MARKETING_ROOT } from "../lib/paths.mjs";
+import { MARKETING_ROOT, STATE_DIR } from "../lib/paths.mjs";
 import { writeDecks } from "./write-decks.mjs";
 import { makeImages } from "./make-images.mjs";
 import { redact } from "../lib/gemini.mjs";
@@ -41,6 +45,12 @@ function run(script, args) {
   });
 }
 
+/** Decks that have been through this pipeline already and belong to the bot now. */
+function queuedDecks() {
+  try { return new Set(JSON.parse(readFileSync(join(STATE_DIR, "queue.json"), "utf8")).items.map((i) => i.deckId)); }
+  catch { return new Set(); }
+}
+
 export async function daily({ force = false } = {}) {
   const result = { ok: false, decks: [], dropped: [], imageFailures: [], error: null };
   try {
@@ -49,10 +59,14 @@ export async function daily({ force = false } = {}) {
     result.dropped = w.dropped;
     if (!w.written.length) throw new Error(`no deck survived validation (${w.dropped.length} dropped)`);
 
-    const img = await makeImages(w.written);
+    const queued = queuedDecks();
+    const fresh = w.written.filter((id) => !queued.has(id));
+    if (fresh.length < w.written.length) console.log(`  · ${w.written.length - fresh.length} deck(s) already queued — not rendered again`);
+
+    const img = await makeImages(fresh);
     result.imageFailures = img.failed;
 
-    const render = await run("scripts/make-slideshow.mjs", w.written);
+    const render = fresh.length ? await run("scripts/make-slideshow.mjs", fresh) : { code: 0, out: "" };
     if (render.code !== 0) throw new Error(`render failed:\n${render.out.trim().split("\n").slice(-8).join("\n")}`);
 
     const enq = await run("bot/enqueue.mjs", w.written);
