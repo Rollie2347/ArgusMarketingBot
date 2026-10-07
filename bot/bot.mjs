@@ -431,8 +431,11 @@ async function tick() {
       const d = new Date();
       const today = localDate(d);
       const hhmm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-      if (hhmm >= config.dailyRunAt && readDaily().lastRunDate !== today) {
+      const day = readDaily();
+      if (hhmm >= config.dailyRunAt && day.lastRunDate !== today) {
         runDaily({ reason: `scheduled ${config.dailyRunAt}` }).catch((err) => console.error(`  ✗ daily: ${tg.redact(err.message)}`));
+      } else if (dailyRetryDue(day, today)) {
+        runDaily({ reason: `scheduled retry ${(day.attempts || 1) + 1}/${DAILY_MAX_ATTEMPTS}` }).catch((err) => console.error(`  ✗ daily: ${tg.redact(err.message)}`));
       }
     }
   } catch (err) {
@@ -452,13 +455,27 @@ function writeDaily(v) {
   writeFileSync(DAILY_FILE, JSON.stringify(v, null, 2), "utf8");
 }
 
+// A failed batch is tried again on its own, a bounded number of times: on
+// 2026-10-07 the 07:00 batch failed and nothing arrived until /generate was
+// typed hours later. Most failures (a slow model, a dropped connection) are
+// gone 15 minutes on; one that isn't stops after DAILY_MAX_ATTEMPTS.
+const DAILY_MAX_ATTEMPTS = 3;
+const DAILY_RETRY_MS = 15 * 60_000;
+function dailyRetryDue(day, today) {
+  return day.lastRunDate === today && day.ok === false && Boolean(day.finishedAt) &&
+    (day.attempts || 1) < DAILY_MAX_ATTEMPTS && Date.now() - Date.parse(day.finishedAt) >= DAILY_RETRY_MS;
+}
+
 let dailyRunning = false;
 async function runDaily({ force = false, reason }) {
   if (dailyRunning) { await say("A batch is already being generated."); return; }
   dailyRunning = true;
   // Marked at the START: a batch that fails is reported, not retried every
   // tick — retrying a failing model call every 20s is how a bug spends money.
-  writeDaily({ ...readDaily(), lastRunDate: localDate(new Date()), startedAt: new Date().toISOString() });
+  const prev = readDaily();
+  const today = localDate(new Date());
+  const attempts = prev.lastRunDate === today ? (prev.attempts || 1) + 1 : 1;
+  writeDaily({ lastRunDate: today, startedAt: new Date().toISOString(), attempts });
   try {
     // Silent when it runs on its own schedule — the decks arriving is the
     // message. Only a /generate you typed gets an acknowledgement.
@@ -478,7 +495,10 @@ async function runDaily({ force = false, reason }) {
 
     if (!res?.ok) {
       const tail = tg.redact(res?.error || out.trim().split(/\r?\n/).slice(-8).join("\n"));
-      await say(`🔥 <b>DAILY BATCH FAILED</b> (exit ${code})\n\n<pre>${esc(clip(tail, 3000))}</pre>\n\nFix it, then /generate to resume — finished steps are not redone.`);
+      const next = attempts < DAILY_MAX_ATTEMPTS
+        ? `I'll try again by myself in ${DAILY_RETRY_MS / 60_000} minutes (attempt ${attempts} of ${DAILY_MAX_ATTEMPTS}) — or /generate to retry now.`
+        : `That was attempt ${attempts} of ${DAILY_MAX_ATTEMPTS}, so I've stopped trying. Fix it, then /generate to resume — finished steps are not redone.`;
+      await say(`🔥 <b>DAILY BATCH FAILED</b> (exit ${code})\n\n<pre>${esc(clip(tail, 3000))}</pre>\n\n${next}`);
       return;
     }
 

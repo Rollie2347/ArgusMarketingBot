@@ -159,8 +159,8 @@ human checks the account before pressing Retry. Upload-Post calls also carry
 the item id as an idempotency key, so a retry after a timeout can't double-post.
 
 A failed **daily batch** is reported (🔥 DAILY BATCH FAILED, with the reason)
-and not retried automatically — retrying a failing model call every tick is
-how a bug spends money. `/generate` resumes it.
+and retried by itself 15 minutes later, up to 3 attempts a day — never every
+tick, which is how a bug spends money. `/generate` retries it at once.
 
 Telegram flood control (HTTP 429) is waited out and retried, and albums are
 spaced 1.5s apart — the first real delivery lost two decks to it.
