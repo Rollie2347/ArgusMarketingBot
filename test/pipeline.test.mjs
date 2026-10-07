@@ -56,7 +56,7 @@ function goodDeck(overrides = {}) {
     ctaId: "CTA-01",
     capabilities: ["get_recipe_suggestion", "identify_scene"],
     slides: [
-      { type: "hook", kicker: "Every recipe app", headline: "Fourteen ingredients, typed. Again.", image: { prompt: "an open refrigerator at night, eggs and half a lemon on a shelf, warm light spilling onto a kitchen floor" } },
+      { type: "hook", meme: "me typing the whole fridge into a recipe app", headline: "Fourteen ingredients, typed. Again.", image: { prompt: "an open refrigerator at night, eggs and half a lemon on a shelf, warm light spilling onto a kitchen floor" } },
       { type: "body", step: "THE USUAL WAY", headline: "Type it all in first", body: "Half a lemon. Parsley, probably fine. By the time it's typed you've lost interest." },
       { type: "body", step: "THE OTHER WAY", headline: "Point the camera and [[gold]]talk[[/gold]]", body: "Argus sees the shelf through your camera while you speak. No typing, no list." },
       { type: "quote", headline: "What that sounds like", turns: [{ who: "you", text: "Twenty minutes. What can I make?" }, { who: "argus", text: "Eggs, that lemon and the parsley — a herb omelette. Fifteen minutes." }] },
@@ -133,6 +133,9 @@ test("strict mode catches what a model gets wrong", async () => {
   assert.ok(v(withSlide(1, { body: "Set a timer and it will notify you." })).some((e) => /notifications/.test(e)));
   assert.ok(v(withSlide(0, { image: { prompt: "a phone screen showing the Argus app interface" } })).some((e) => /plain photographs/.test(e)), "a generated app screen is a fake demo");
   assert.ok(v(withSlide(0, { headline: "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen" })).some((e) => /hook headline/.test(e)));
+  assert.ok(v(withSlide(0, { meme: "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen" })).some((e) => /meme caption/.test(e)));
+  assert.ok(v(withSlide(0, { meme: "POV: it can search the web for you" })).some((e) => /dormant/.test(e)), "a meme caption is published copy like any other");
+  assert.ok(v(withSlide(2, { meme: "me, again" })).some((e) => /hook slide only/.test(e)));
 });
 
 test("personal TikTok: 'link in bio' is refused for TikTok, allowed per-platform for Instagram", async () => {
@@ -240,6 +243,44 @@ test("writer: a dropped deck is topped up, so the day still gets its full count"
   assert.match(calls[3].body.contents[0].parts[0].text, /Do NOT use these hook ids[^\n]*PS-02/, "and not for a hook already used today");
 });
 
+test("writer: the avoid list is cut back, oldest first, until the request can be met", async () => {
+  const { avoidList } = await import("../scripts/write-decks.mjs");
+  const { readHookLibrary } = await import("../lib/validate.mjs");
+  const live = [...readHookLibrary().hooks.keys()];
+
+  // 2026-10-07: 26 of 28 hooks were recent, leaving PS-05 and DM-03 for three decks.
+  const recent = live.filter((h) => !["PS-05", "DM-03"].includes(h));
+  const { avoid, free } = avoidList([], recent, live, 3);
+  assert.ok(free.length >= 6, `only ${free.length} hooks free for 3 decks`);
+  assert.ok(new Set(free.map((h) => h.split("-")[0])).size >= 3, "three decks need three angles");
+  assert.deepEqual(avoid, recent.slice(0, avoid.length), "the most recently used stay off the table");
+
+  const roomy = avoidList([], ["PS-06", "TY-03"], live, 3);
+  assert.deepEqual(roomy.avoid, ["PS-06", "TY-03"], "nothing is released while there is room");
+
+  const today = avoidList(["PS-05", "DM-03"], recent, live, 1);
+  assert.ok(today.avoid.includes("PS-05") && today.avoid.includes("DM-03"), "a hook used today is never released");
+});
+
+test("writer: a hook from the avoid list is refused, and a meme hook is required", async () => {
+  const { writeDecks } = await import("../scripts/write-decks.mjs");
+  calls = [];
+  const DAY4 = new Date(2026, 9, 6, 7, 0);
+  const noMeme = goodDeck({ slug: "no-meme", angle: "identity", hookId: "ID-01", slides: goodDeck().slides.map(({ meme, ...x }) => x) });
+  // PS-02 was written for DAY3 above, so it is recent on DAY4.
+  textReplies = [
+    { decks: [goodDeck({ slug: "repeat", hookId: "PS-02" }), noMeme] },
+    { deck: goodDeck({ slug: "repeat", hookId: "PS-03" }) },
+    { deck: goodDeck({ slug: "no-meme", angle: "identity", hookId: "ID-01" }) },
+  ];
+  const res = await writeDecks({ count: 2, now: DAY4, log: () => {} });
+  assert.equal(res.written.length, 2);
+  assert.match(calls[0].body.contents[0].parts[0].text, /"meme"[\s\S]*ORIGINAL joke/, "the request asks for the meme");
+  assert.match(calls[0].body.contents[0].parts[0].text, /Choose from the ones that leaves: [^\n]*PS-03/, "and names the hooks that are free");
+  assert.match(calls[1].body.contents[0].parts[0].text, /PS-02 was posted in the last/);
+  assert.match(calls[2].body.contents[0].parts[0].text, /hook slide needs a "meme"/);
+});
+
 /* ── images ─────────────────────────────────────────────────────────────── */
 
 test("images: generated once, cached by prompt, and written into the deck", async () => {
@@ -253,6 +294,8 @@ test("images: generated once, cached by prompt, and written into the deck", asyn
   assert.ok(existsSync(join(data, "assets", "261003-1-typing-ingredients", deck.slides[0].image.file)));
   assert.match(calls[0].body.contents[0].parts[0].text, /no legible text[\s\S]*phone screens/i, "the style guard is appended to every prompt");
   assert.equal(calls[0].body.generationConfig.imageConfig.aspectRatio, "9:16");
+  assert.match(calls[0].body.contents[0].parts[0].text, /reaction photo[\s\S]*never a celebrity/, "a meme hook gets the reaction-shot style");
+  assert.doesNotMatch(calls[0].body.contents[0].parts[0].text, /No identifiable faces/);
 
   calls = [];
   const r2 = await makeImages(["261003-1-typing-ingredients"], { log: () => {} });
@@ -288,6 +331,7 @@ test("a generated deck with a photo renders PNG + JPEG for both platforms", () =
   }
   const html = readFileSync(join(data, "out", "261003-1-typing-ingredients", "tiktok", "_html", "01.html"), "utf8");
   assert.match(html, /class="bgimg"/, "the hook slide carries its photo");
+  assert.match(html, /data-meme="1"[\s\S]*<div class="meme" data-fit>me typing the whole fridge/, "and its meme caption");
   const manifest = JSON.parse(readFileSync(join(data, "out", "261003-1-typing-ingredients", "manifest.json"), "utf8"));
   assert.equal(manifest.aiImages, true);
 });

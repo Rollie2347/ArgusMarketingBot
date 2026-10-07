@@ -128,6 +128,12 @@ function footer(slide, ctx) {
 function renderStage(slide) {
   switch (slide.type) {
     case "hook":
+      // Meme hook: the caption owns the top of the frame and the photo the
+      // middle, so the headline is the only other copy — kicker and sub
+      // would make it a slide to read rather than a joke to get.
+      if (slide.meme) return `
+        <div class="meme" data-fit>${rich(slide.meme)}</div>
+        <h1 class="hook-head" data-fit>${rich(slide.headline)}</h1>`;
       return `
         ${slide.kicker ? `<div class="eyebrow">${rich(slide.kicker)}</div>` : ""}
         <h1 class="hook-head" data-fit>${rich(slide.headline)}</h1>
@@ -248,7 +254,7 @@ export function renderPage(slide, ctx) {
 <style>${theme()}</style>
 </head>
 <body>
-<div class="slide" data-type="${esc(slide.type)}">
+<div class="slide" data-type="${esc(slide.type)}"${slide.type === "hook" && slide.meme ? ' data-meme="1"' : ""}>
   ${ctx.imageUrl ? `<img class="bgimg" src="${esc(ctx.imageUrl)}" alt=""><div class="scrim"></div>` : ""}
   ${topbar(slide, ctx)}
   <div class="stage">${renderStage(slide)}</div>

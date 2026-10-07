@@ -243,6 +243,27 @@ body {
 .slide[data-type="hook"] .eyebrow { margin-bottom: 40px; }
 .slide[data-type="hook"] .hook-head { margin-bottom: 8px; }
 
+/* --- slide type: hook, meme variant --------------------------------------- */
+
+/* The caption is set the way captions are set on the platforms themselves —
+   white with a black outline, centred — so slide 1 reads as a post, not an
+   ad. It sits at the top of the stage; the headline stays bottom-weighted and
+   the photo's subject shows between them. */
+.meme {
+  margin-bottom: auto;
+  font-size: calc(var(--s-head) * .94);
+  line-height: 1.16;
+  font-weight: 800;
+  letter-spacing: -.005em;
+  color: #fff;
+  text-align: center;
+  text-wrap: balance;
+  -webkit-text-stroke: 11px #000;
+  paint-order: stroke fill;
+}
+html[data-image="1"] .slide[data-meme="1"] .meme { text-shadow: none; }
+.slide[data-meme="1"] .hook-head { font-size: calc(var(--s-hook) * .8); }
+
 /* --- slide type: body ----------------------------------------------------- */
 
 .step {
@@ -393,6 +414,11 @@ body {
 }
 .slide[data-type="hook"] > .scrim {
   background: linear-gradient(180deg, rgba(8,8,12,.30) 0%, rgba(8,8,12,.18) 26%, rgba(8,8,12,.78) 58%, rgba(8,8,12,.96) 100%);
+}
+/* A meme's photo is the punchline: clear through the middle, dark only under
+   the headline. */
+.slide[data-type="hook"][data-meme="1"] > .scrim {
+  background: linear-gradient(180deg, rgba(8,8,12,.30) 0%, rgba(8,8,12,0) 24%, rgba(8,8,12,0) 54%, rgba(8,8,12,.80) 72%, rgba(8,8,12,.96) 100%);
 }
 /* The gold bloom would muddy a photograph. */
 html[data-image="1"] .slide::before { display: none; }

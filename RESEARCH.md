@@ -264,6 +264,21 @@ Note the qualifier on these playbooks: they are agency content-marketing, so the
 by construction. The Lightreel finding in §3.2 is more specific and more useful, and `HOOKS.md` is
 built primarily on it.
 
+### 3.5 Meme hooks — what makes one get shared (added 2026-10-07)
+
+**Nobody publishes click data for meme hooks on slideshows.** Every page that claims to is a
+carousel-tool vendor (§0). What exists is one academic study of the images, one meta-analysis of
+humour in ads, a theory of why things are funny, and case studies. `memeHook` is therefore a
+hypothesis: the test is our own slide-1 → slide-2 swipe rate against the pre-10-07 decks.
+
+| Finding | Tier | What we do with it |
+|---|---|---|
+| Viral image memes are more likely to be a **close-up**, to contain a **character**, and to show a **clear positive or negative emotion**. Memes with **no clear subject** or **long text** are the ones that don't get re-shared. ([Ling et al., CSCW 2021](https://www.arxiv.org/pdf/2101.06535) — codebook built on 100 hand-annotated memes, classifier AUC 0.866, then picked 19 of the 20 most popular Twitter/Reddit memes of 2016–18. Sample is 4chan /pol/, so the visual findings transfer better than anything about content.) | **SOFT**, but the only peer-reviewed evidence there is | `MEME_STYLE`: tight close-up, one subject, one emotion. Caption ≤ 10 words asked, 12 enforced. |
+| Humour's largest measured effects in advertising are on **attention** and **attitude toward the ad** — not on recall of the claim or on purchase. ([Eisend 2009 meta-analysis, 38 usable studies, via Marketing Week](https://marketingweek.com/three-ways-humour-helps-brands-sell)) | **SOFT** | The joke goes on slide 1 only, where attention is the whole job. The claim slides stay straight. |
+| **Benign violation**: something is funny when it is wrong and harmless at the same moment. ([McGraw & Warren, CU Boulder Humor Research Lab](https://www.colorado.edu/today/node/34307)) | Theory, well supported | The joke is an overreaction — tiny stakes taken with total seriousness — and the photo is the punchline, never an illustration of the caption. |
+| A slideshow-led app (Stronger, 700k users) opened on **a person in a situation plus a 2–4 word hook that is mildly contentious inside the niche** ("Grandpa was right", "Skipping legs…"). ([Shortimize](https://shortimize.com/blog/the-slideshow-strategy-that-generated-700000-users-in-275-days) — 725 posts, 11 over 1M views; no failure data, vendor blog.) | ⚠️ one case | Supports very short text over a face. Headline on a meme hook cut to ≤ 6 words. |
+| "Posts with memes get 60% more engagement", "POV posts draw more comments per view", "under 8 words". | ⚠️ **FOLKLORE** — vendor blogs, no traceable dataset | The POV / "me:" / "nobody:" formats are used because they are instantly read as a joke, not because of these numbers. |
+
 ### 3.4 Format length — SOFT, and note it's about video not carousels
 
 "Medium-length videos (20–40s) pull ~2M views on average with 4.06% engagement." ⚠️ The "2M average"

@@ -35,11 +35,30 @@ import { generateImage, IMAGE_MODEL, redact } from "../lib/gemini.mjs";
 
 const MAX_IMAGES_PER_RUN = parseInt(process.env.MAX_IMAGES_PER_RUN || "12", 10);
 
+const NO_TEXT = "Absolutely no legible text, letters, numbers, labels, packaging brands, logos, watermarks, user interfaces or phone screens anywhere in the frame.";
+
 export const STYLE = [
   "Photorealistic editorial photograph, shot on a phone camera, natural available light, shallow depth of field, muted warm tones, a little grain.",
   "Vertical 9:16 composition: the subject sits in the upper half; the lower half is quieter and darker, because headline text will be overlaid there.",
-  "Absolutely no legible text, letters, numbers, labels, packaging brands, logos, watermarks, user interfaces or phone screens anywhere in the frame.",
+  NO_TEXT,
   "No identifiable faces.",
+].join(" ");
+
+/**
+ * A meme hook's photo is the punchline, not atmosphere: a close-up of one
+ * subject showing one emotion, bright enough to read at thumbnail size —
+ * close-up scale, a character and visible emotion are the three image traits
+ * shared memes have in common (RESEARCH.md §3.5). Faces are allowed
+ * here — the reaction is the joke — but only invented ones. The caption is
+ * drawn by the template, never by the image model.
+ */
+export const MEME_STYLE = [
+  "Candid, funny, instantly readable reaction photo, shot on a phone camera, bright natural light, sharp focus on the subject, true-to-life colour.",
+  "A tight close-up of one subject caught mid-reaction: the face fills the centre of the frame and shows one exaggerated, unmistakable emotion, played completely straight — the comedy is how seriously the subject is taking it.",
+  "Vertical 9:16 composition: the face sits in the middle third of the frame, eyes just above centre; the top quarter and the bottom third hold nothing important, because caption text will be overlaid there.",
+  "One continuous full-bleed photograph that fills the whole frame edge to edge: no borders, bands, bars, panels, split frames or blurred padding — the real background simply continues, out of focus, above and below the subject.",
+  NO_TEXT,
+  "Any person is an ordinary, anonymous, invented adult — never a celebrity, public figure, or character from a film, show or game.",
 ].join(" ");
 
 const EXT = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" };
@@ -63,7 +82,8 @@ export async function makeImages(deckIds, { log = console.log } = {}) {
     for (const [i, slide] of (deck.slides || []).entries()) {
       if (!slide.image?.prompt) continue;
       const n = String(i + 1).padStart(2, "0");
-      const h = hash(`${IMAGE_MODEL}\n${slide.image.prompt}\n${STYLE}`);
+      const style = slide.meme ? MEME_STYLE : STYLE;
+      const h = hash(`${IMAGE_MODEL}\n${slide.image.prompt}\n${style}`);
 
       // Already generated for exactly this prompt?
       const existing = existsSync(dir) ? readdirSync(dir).find((f) => f.startsWith(`${n}-${h}.`)) : null;
@@ -81,7 +101,7 @@ export async function makeImages(deckIds, { log = console.log } = {}) {
       }
 
       try {
-        const img = await generateImage(`${slide.image.prompt.trim()}\n\n${STYLE}`, { aspectRatio: "9:16" });
+        const img = await generateImage(`${slide.image.prompt.trim()}\n\n${style}`, { aspectRatio: "9:16" });
         const ext = EXT[img.mimeType] || "png";
         mkdirSync(dir, { recursive: true });
         const name = `${n}-${h}.${ext}`;

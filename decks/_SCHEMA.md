@@ -74,6 +74,21 @@ unfilled refuses to render. Prompts describe a **photograph of the real-world sc
 app, a phone screen, an interface, text or a logo (validation refuses those words). Generated
 decks use it on the hook slide and at most one other.
 
+## Meme hook
+
+```jsonc
+{ "type": "hook", "meme": "me looking at the pipes under my sink like I understand plumbing",
+  "headline": "Staring under the sink //[[gold]]clueless[[/gold]]",
+  "image": { "prompt": "a puzzled ginger cat staring into the open cupboard beneath a kitchen sink" } }
+```
+
+`"meme"` (hook slide only, ≤ 12 words; the writer is asked for ≤ 10) is drawn at the top of slide 1 in platform caption style —
+white, black outline — over the photo, with the headline underneath; `kicker` and `sub` are not
+drawn. The photo is generated as a reaction shot (`MEME_STYLE` in `scripts/make-images.mjs`), the
+one place a generated face is allowed. The caption is published copy and goes through the same
+banned-phrase scan as everything else. Memes are original: no existing templates, celebrities,
+characters or brands. `config.json` `memeHook: true` makes the daily writer require one.
+
 ## Generated decks
 
 Decks written by `scripts/write-decks.mjs` are named `<yymmdd>-<n>-<slug>`, carry a

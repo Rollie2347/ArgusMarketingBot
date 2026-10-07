@@ -17,7 +17,8 @@
  *   two real decks    — as style examples
  *   FEEDBACK.md       — every rejection and change request, with reasons.
  *                       This is how an ❌ in Telegram shapes tomorrow's batch.
- *   recent hook ids   — so the same hook doesn't run twice in a week
+ *   recent hook ids   — so the same hook doesn't run twice in a week (as far as
+ *                       the library's size allows — see avoidList)
  *
  * What the model does NOT decide: the deck id, the campaign token, or the
  * handle. Those are attribution plumbing and are set here deterministically.
@@ -73,6 +74,7 @@ export function existingBatch(yymmdd) {
  * Hook ids used by generated decks whose BATCH date is within the last
  * RECENT_DAYS days of `now` — the day a deck is for, not the moment it was
  * written (a batch written ahead, or re-run, must count on its own day).
+ * Most recently used first.
  */
 function recentHooks(now = new Date()) {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -80,7 +82,37 @@ function recentHooks(now = new Date()) {
   return [...new Set(readDecks()
     .filter((d) => /^\d{6}$/.test(d.generated?.batch || ""))
     .filter((d) => { const age = (today - batchDay(d.generated.batch)) / 86400_000; return age >= 0 && age <= RECENT_DAYS; })
+    .sort((a, b) => b.generated.batch.localeCompare(a.generated.batch) || String(b.generated.at || "").localeCompare(String(a.generated.at || "")))
     .map((d) => d.hookId))];
+}
+
+/**
+ * The hooks a request may not use, cut back until the request can be met.
+ *
+ * Three decks a day against a 28-hook library uses 24 hooks in the 8 days the
+ * repeat window covers, and one extra batch empties it: on 2026-10-07 the
+ * writer was asked for 3 decks on 3 angles with 2 hooks left. The model spent
+ * 23,000 thinking tokens (200–300s) on a puzzle with no answer and every
+ * attempt hit the request timeout. So: today's hooks are always off the table,
+ * and the recent ones are released oldest-first until at least twice as many
+ * hooks as decks are free, across at least as many angles as decks.
+ *
+ * @param {string[]} usedToday  hooks already written in this run — never released
+ * @param {string[]} recent     recentHooks(), most recently used first
+ * @param {string[]} live       every live hook id in HOOKS.md
+ * @returns {{ avoid: string[], free: string[] }}
+ */
+export function avoidList(usedToday, recent, live, want) {
+  const avoid = [...new Set([...usedToday, ...recent])].filter((h) => live.includes(h));
+  const keep = avoid.filter((h) => usedToday.includes(h)).length;
+  const angleCount = (hs) => new Set(hs.map((h) => h.split("-")[0])).size;
+  const needAngles = Math.min(want, angleCount(live));
+  let free = live.filter((h) => !avoid.includes(h));
+  while (avoid.length > keep && (free.length < want * 2 || angleCount(free) < needAngles)) {
+    avoid.pop();
+    free = live.filter((h) => !avoid.includes(h));
+  }
+  return { avoid, free };
 }
 
 /** The last ~40 feedback rows — the table body only, header stripped. */
@@ -123,20 +155,28 @@ ${exampleDecks().join("\n\n")}
 `;
 }
 
-function batchPrompt({ count, avoidHooks, feedback, noBioLink }) {
+function batchPrompt({ count, avoidHooks, freeHooks, feedback, noBioLink, memeHook }) {
   const angleList = Object.keys(ANGLES).map((a) => `"${a}" (hook ids ${ANGLES[a].prefix}-NN)`).join(", ");
   return `Write ${count} new slideshow deck${count > 1 ? "s" : ""}.
 
 Hard requirements for every deck:
 - "angle": one of ${angleList}. Use a DIFFERENT angle for each deck in this batch.
-- "hookId": an existing, non-retired hook id from HOOKS.md belonging to that angle. Each deck in this batch uses a different hook.${avoidHooks.length ? `\n- Do NOT use these hook ids (posted in the last ${RECENT_DAYS} days): ${avoidHooks.join(", ")}.` : ""}
+- "hookId": an existing, non-retired hook id from HOOKS.md belonging to that angle. Each deck in this batch uses a different hook.${avoidHooks.length ? `\n- Do NOT use these hook ids (posted in the last ${RECENT_DAYS} days): ${avoidHooks.join(", ")}. Choose from the ones that leaves: ${freeHooks.join(", ")}.` : ""}
 - The hook slide's headline must express that hook's idea in fresh words (don't copy the library line verbatim), ≤ 8 words ideally, never more than 12.
 - "ctaId": a CTA id from the CTA library; the final "cta" slide's copy must match that CTA.
 - "capabilities": only from this list: ${VERIFIED_CAPABILITIES.join(", ")}. List every tool the deck's claims depend on.
 - 7 or 8 slides. First slide type "hook", last slide type "cta". Use at least one "quote" slide (a realistic spoken exchange, "you" and "argus") and vary the middle slide types.
 - Copy lengths within the schema's "comfortable" column.
-- "image": give the HOOK slide an "image": {"prompt": "..."} and at most ONE other slide. The prompt describes a PHOTOGRAPH of the real-world scene (e.g. "an open refrigerator at night, half a lemon and a carton of eggs on the shelf, soft light spilling out"). NEVER mention the app, a phone screen, any interface, text, labels you can read, logos or brand names. Hands are fine; avoid faces.
-- "caption": {"tiktok": "...", "instagram": "..."}. Each says it is free and on iPhone. TikTok: 1–3 short sentences. Instagram: a few short lines ending with a send-shaped prompt ("send this to…").
+- "image": give the HOOK slide an "image": {"prompt": "..."} and at most ONE other slide. The prompt describes a PHOTOGRAPH of the real-world scene (e.g. "an open refrigerator at night, half a lemon and a carton of eggs on the shelf, soft light spilling out"). NEVER mention the app, a phone screen, any interface, text, labels you can read, logos or brand names. Hands are fine; avoid faces${memeHook ? " (except on the meme hook, below)" : ""}.
+${memeHook ? `- "meme": the HOOK slide is a MEME — it is what stops the scroll, so it has to actually be funny. Give the hook slide a "meme" caption and an image prompt that work as a setup and a punchline (RESEARCH.md §3.5):
+  · CAPTION: 10 words or fewer — long text is the clearest marker of a meme nobody shares. Lowercase, no full stop, in a format people already read as a joke: "me:", "POV:", "nobody: // me:", "when you…", "me at 11pm…". It names ONE small, specific, slightly embarrassing moment from before Argus enters the story. Specific beats general: a number, a time of day, the exact dumb thing ("me googling 'clicky metal bit near back wheel'" beats "me trying to describe a bike part").
+  · THE JOKE is an overreaction: tiny stakes, treated with total seriousness. The caption is the setup and the PHOTO is the punchline — the photo must never just illustrate the caption. Bad: caption about a leak + a person looking at a leak. Good: "me pretending i know which pipe it is" + a golden retriever in a hard hat staring gravely into the cupboard. The gap between how small the problem is and how hard the subject is taking it is what is funny.
+  · IMAGE PROMPT: a tight CLOSE-UP of ONE subject with ONE unmistakable emotion — betrayal, dread, smug confidence, thousand-yard stare, the face of someone doing maths. Close-ups of a character showing emotion are what shared memes have in common. An animal doing the human thing, deadly serious, is usually funnier than a person; a person works when the expression is extreme. Name the emotion and the absurd detail in the prompt. Faces are welcome on this slide only.
+  · Write five candidate caption + photo pairs for each deck, and keep the one a stranger would send to a friend with no context. If none of the five would be sent, they are descriptions, not jokes — write five more.
+  · The caption must NOT mention Argus, an app or AI, and must not be mean about anyone but the narrator.
+  · On a meme hook the "headline" is the quiet turn underneath the joke: 6 words or fewer. Leave "kicker" and "sub" off.
+- The meme is an ORIGINAL joke in a familiar FORMAT. Never reference or imitate a specific existing meme image, a celebrity, a film, show or game character, or a brand.
+` : ""}- "caption": {"tiktok": "...", "instagram": "..."}. Each says it is free and on iPhone. TikTok: 1–3 short sentences. Instagram: a few short lines ending with a send-shaped prompt ("send this to…").
 ${noBioLink.length ? `- IMPORTANT — the ${noBioLink.join(" and ")} account has NO link in its bio. Never write "link in bio" (or any bio link) in ${noBioLink.join("/")} copy. Instead tell viewers to search "My Argus" on the App Store (it has a gold ring icon). ${noBioLink.includes("instagram") ? `Any copy field may be a {"tiktok": "...", "instagram": "..."} object where the platforms should differ.` : `Where the slides say "link in bio" for Instagram, make that field per-platform: e.g. "pill": {"tiktok": "Search “My Argus” on the App Store", "instagram": "Link in bio"}. Any copy field may be a {"tiktok": "...", "instagram": "..."} object like this.
 - The Instagram caption points to the link in bio.`}` : `- Both captions point to the link in bio.`}
 - "hashtags": {"tiktok": [...], "instagram": [...]}: 5–10 each, lowercase, no "#", no spaces.
@@ -177,7 +217,9 @@ export async function writeDecks({ count = parseInt(process.env.DECKS_PER_DAY ||
   const config = JSON.parse(readFileSync(CONFIG_FILE, "utf8"));
   const platforms = config.platforms;
   const library = readHookLibrary();
-  const avoidHooks = recentHooks(now);
+  const liveHooks = [...library.hooks.keys()];
+  const recent = recentHooks(now);
+  const memeHook = config.memeHook === true;
   const system = systemPrompt();
 
   const noBioLink = noBioLinkPlatforms(config);
@@ -187,6 +229,7 @@ export async function writeDecks({ count = parseInt(process.env.DECKS_PER_DAY ||
   const usedHooks = new Set();
   const written = [];
   const dropped = [];
+  let avoid = [];
 
   // Three a day means three a day (Rollie, 2026-09-27): a deck that fails
   // validation twice is dropped, so ask again for the shortfall — up to
@@ -194,11 +237,12 @@ export async function writeDecks({ count = parseInt(process.env.DECKS_PER_DAY ||
   const TOPUP_ROUNDS = 2;
   for (let round = 0; round <= TOPUP_ROUNDS && written.length < count; round++) {
     const want = count - written.length;
-    const avoid = [...new Set([...avoidHooks, ...usedHooks])];
-    log(`  ✎ ${round ? `top-up ${round}/${TOPUP_ROUNDS}: ` : ""}asking ${TEXT_MODEL} for ${want} deck(s)${avoid.length ? `, avoiding ${avoid.join(" ")}` : ""}`);
+    const pool = avoidList([...usedHooks], recent, liveHooks, want);
+    avoid = pool.avoid;
+    log(`  ✎ ${round ? `top-up ${round}/${TOPUP_ROUNDS}: ` : ""}asking ${TEXT_MODEL} for ${want} deck(s)${avoid.length ? `, avoiding ${avoid.join(" ")}` : ""} (${pool.free.length} hook(s) free)`);
     let drafts = [];
     try {
-      const reply = await generateJson(batchPrompt({ count: want, avoidHooks: avoid, feedback: feedbackRows(), noBioLink }), { system });
+      const reply = await generateJson(batchPrompt({ count: want, avoidHooks: avoid, freeHooks: pool.free, feedback: feedbackRows(), noBioLink, memeHook }), { system });
       drafts = Array.isArray(reply?.decks) ? reply.decks.slice(0, want) : [];
     } catch (err) {
       if (!round) throw err; // the first call failing is a real failure; a top-up failing just stops the top-up
@@ -217,14 +261,14 @@ export async function writeDecks({ count = parseInt(process.env.DECKS_PER_DAY ||
   async function writeDrafts(drafts) {
   for (const draft of drafts) {
     let deck = finalize(draft, stamp, ++seq);
-    let errors = check(deck, platforms, library, usedHooks, noBioLink);
+    let errors = check(deck, platforms, library, usedHooks, noBioLink, avoid, memeHook);
 
     for (let attempt = 1; errors.length && attempt <= MAX_REPAIRS; attempt++) {
       log(`  ↻ ${deck.id}: ${errors.length} validation error(s), repair ${attempt}/${MAX_REPAIRS}`);
       try {
         const fixed = await generateJson(repairPrompt(strip(deck), errors), { system, temperature: 0.4 });
         deck = finalize(fixed?.deck ?? fixed, stamp, seq, deck.id);
-        errors = check(deck, platforms, library, usedHooks, noBioLink);
+        errors = check(deck, platforms, library, usedHooks, noBioLink, avoid, memeHook);
       } catch (err) {
         errors = [...errors, `repair call failed: ${redact(err.message)}`];
         break;
@@ -273,9 +317,11 @@ function strip(deck) {
   return rest;
 }
 
-function check(deck, platforms, library, usedHooks, noBioLink = []) {
+function check(deck, platforms, library, usedHooks, noBioLink = [], avoid = [], memeHook = false) {
   const errors = validateDeck(deck, platforms, { strict: true, library, noBioLink });
   if (usedHooks.has(deck.hookId)) errors.push(`hookId ${deck.hookId} is already used by another deck in this batch — pick a different hook`);
+  else if (avoid.includes(deck.hookId)) errors.push(`hookId ${deck.hookId} was posted in the last ${RECENT_DAYS} days — pick one that wasn't`);
+  if (memeHook && !deck.slides?.[0]?.meme) errors.push("the hook slide needs a \"meme\": a caption of at most 10 words (see the request)");
   if (!deck.slides?.[0]?.image) errors.push("the hook slide needs an \"image\": {\"prompt\": \"...\"}");
   const images = (deck.slides || []).filter((s) => s.image).length;
   if (images > 2) errors.push(`${images} slides have images; max 2 (the hook plus one)`);
