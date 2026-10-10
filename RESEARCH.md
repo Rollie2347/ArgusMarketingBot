@@ -278,6 +278,27 @@ hypothesis: the test is our own slide-1 → slide-2 swipe rate against the pre-1
 | **Benign violation**: something is funny when it is wrong and harmless at the same moment. ([McGraw & Warren, CU Boulder Humor Research Lab](https://www.colorado.edu/today/node/34307)) | Theory, well supported | The joke is an overreaction — tiny stakes taken with total seriousness — and the photo is the punchline, never an illustration of the caption. |
 | A slideshow-led app (Stronger, 700k users) opened on **a person in a situation plus a 2–4 word hook that is mildly contentious inside the niche** ("Grandpa was right", "Skipping legs…"). ([Shortimize](https://shortimize.com/blog/the-slideshow-strategy-that-generated-700000-users-in-275-days) — 725 posts, 11 over 1M views; no failure data, vendor blog.) | ⚠️ one case | Supports very short text over a face. Headline on a meme hook cut to ≤ 6 words. |
 | "Posts with memes get 60% more engagement", "POV posts draw more comments per view", "under 8 words". | ⚠️ **FOLKLORE** — vendor blogs, no traceable dataset | The POV / "me:" / "nobody:" formats are used because they are instantly read as a joke, not because of these numbers. |
+| A brand that edited the "Dude With Sign" meme photo into its own social ads was sued for copyright infringement, right of publicity (NY Civil Rights Law §51) and false endorsement; its motion to dismiss was **denied in full**. ([FJerry v. Oasis Energy, via Eric Goldman](https://blog.ericgoldman.org/?p=28237); [Loeb & Loeb, 2025](https://www.loeb.com/en/insights/publications/2025/11/when-brands-use-memes-without-permission-and-get-sued)) | **HARD** for the risk (a ruling, though at the pleading stage) | Formats are borrowed as **wording only**. The trend scout drops any format that is only recognisable with a particular photo, clip, person, character, song or brand. |
+
+**Cultural relevance (added 2026-10-09).** The first nine meme hooks were all "me [doing a thing]"
+over a sad animal: the writer had no source for the present and was told not to borrow. Now
+`lib/trends.mjs` asks Gemini, with Google Search grounding, for this week's caption formats and
+reads Know Your Meme's feeds; the writer must use them. What was measured building it:
+
+- Search grounding and `responseMimeType: application/json` cannot be combined on
+  `gemini-3.8-flash`: HTTP 200, empty text, no searches.
+- The same grounded prompt returned search metadata in **1 of 4** calls; the others are
+  indistinguishable from recall, so they are discarded and retried (`TREND_SEARCH_ATTEMPTS`, 4).
+- The model's sense of "now" is its training date: told it was October 2026, its first grounded
+  reply came from twelve searches about 2024 and offered "aura points". A reply is kept only if a
+  search names the current year, and a format only if its newest sighting is within 2 months.
+- With the feed in the prompt the model does not search at all, so the feed is a separate call.
+- Not usable: TikTok Creative Center's API (`40101 no permission` without a login), imgflip's API
+  (all-time popularity — Drake, Distracted Boyfriend), Google Trends RSS (sports and news), Reddit
+  RSS (titles without the images).
+
+Whether current formats swipe better than evergreen ones is, like `memeHook` itself, a
+hypothesis: every deck records its `memeFormat` so the swipe rates can be compared.
 
 ### 3.4 Format length — SOFT, and note it's about video not carousels
 

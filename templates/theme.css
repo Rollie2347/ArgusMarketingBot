@@ -402,6 +402,11 @@ html[data-image="1"] .slide[data-meme="1"] .meme { text-shadow: none; }
   object-fit: cover;
   z-index: 0;
 }
+/* A meme photo has its subject's face two-fifths down (MEME_STYLE). Centred,
+   the 4:5 crop lifts that face up under the caption; taking most of the crop
+   off the bottom keeps the caption on the wall above the head. No effect at
+   9:16, where nothing is cropped. */
+.slide[data-meme="1"] > .bgimg { object-position: 50% 30%; }
 
 /* The scrim is what makes copy legible over an arbitrary photo. It is darkest
    where the text sits: the lower two-thirds on a hook (bottom-weighted), and

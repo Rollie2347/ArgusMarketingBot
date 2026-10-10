@@ -2,7 +2,7 @@
 /**
  * One day's batch, end to end, up to the approval gate:
  *
- *   write-decks → make-images → make-slideshow → enqueue
+ *   standards check → trend scout → write-decks → make-images → make-slideshow → enqueue
  *
  *   node scripts/daily.mjs            # today's batch (idempotent — re-running resumes it)
  *   node scripts/daily.mjs --force    # an extra batch today
@@ -30,8 +30,10 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 
-import { MARKETING_ROOT, STATE_DIR } from "../lib/paths.mjs";
-import { writeDecks } from "./write-decks.mjs";
+import { MARKETING_ROOT, STATE_DIR, CONFIG_FILE } from "../lib/paths.mjs";
+import { standardsProblems } from "../lib/standards.mjs";
+import { writeDecks, existingBatch, batchStamp } from "./write-decks.mjs";
+import { scoutTrends } from "../lib/trends.mjs";
 import { makeImages } from "./make-images.mjs";
 import { redact } from "../lib/gemini.mjs";
 
@@ -54,6 +56,17 @@ function queuedDecks() {
 export async function daily({ force = false } = {}) {
   const result = { ok: false, decks: [], dropped: [], imageFailures: [], error: null };
   try {
+    // Three a day, a meme on slide 1, swipeable, with sound, on both
+    // platforms: if a setting has drifted from that, make nothing and say so.
+    const off = standardsProblems(JSON.parse(readFileSync(CONFIG_FILE, "utf8")));
+    if (off.length) throw new Error(`the posting settings are off Rollie's standing rule — nothing was made:\n${off.map((o) => `• ${o}`).join("\n")}`);
+
+    // What people are captioning things with this week — before the writer,
+    // which reads the result. A failed scout never fails the day (the writer
+    // falls back to the last good list, then to the evergreen formats), and a
+    // resumed run whose decks are already written doesn't scout at all.
+    if (force || !existingBatch(batchStamp().yymmdd).length) await scoutTrends();
+
     const w = await writeDecks({ force });
     result.decks = w.written;
     result.dropped = w.dropped;

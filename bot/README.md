@@ -32,6 +32,8 @@ bot reads its settings once, at startup.
 ```
 DAILY_RUN_AT (or /generate)
   scripts/daily.mjs
+    lib/trends.mjs    the trend scout: this week's meme caption formats by Google Search
+                      (phrasing only); a failed scout falls back, it never fails the day
     write-decks.mjs   Gemini writes DECKS_PER_DAY decks from HOOKS.md + FEEDBACK.md;
                       strict validation, 2 repair rounds, failures dropped (never posted)
     make-images.mjs   one photo for the hook slide (+ at most one more), cached by prompt

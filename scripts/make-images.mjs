@@ -32,6 +32,9 @@ import { fileURLToPath } from "node:url";
 
 import { DECKS_DIR, ASSETS_DIR } from "../lib/paths.mjs";
 import { generateImage, IMAGE_MODEL, redact } from "../lib/gemini.mjs";
+import { memeStyle, DEFAULT_LOOK } from "../lib/looks.mjs";
+import { findFfmpeg } from "../lib/video.mjs";
+import { spawnSync } from "node:child_process";
 
 const MAX_IMAGES_PER_RUN = parseInt(process.env.MAX_IMAGES_PER_RUN || "12", 10);
 
@@ -45,21 +48,48 @@ export const STYLE = [
 ].join(" ");
 
 /**
- * A meme hook's photo is the punchline, not atmosphere: a close-up of one
- * subject showing one emotion, bright enough to read at thumbnail size —
- * close-up scale, a character and visible emotion are the three image traits
- * shared memes have in common (RESEARCH.md §3.5). Faces are allowed
- * here — the reaction is the joke — but only invented ones. The caption is
- * drawn by the template, never by the image model.
+ * A meme hook's photo is the punchline, not atmosphere — and it has to be a
+ * joke on its own, before the caption is read.
+ *
+ * Until 2026-10-09 this asked for "a tight close-up … the face fills the
+ * centre of the frame". That removes the situation, the prop and the action,
+ * and what is left is a portrait: ten memes in a row were a handsome animal
+ * looking at the camera, with nothing in the frame to do with the caption
+ * (Rollie: "still just a basic animal … people will just scroll past"). So
+ * every look in lib/looks.mjs is one character DOING the thing, with the
+ * thing in frame, close enough that the face still reads (a character with a
+ * visible emotion is what shared memes have in common — RESEARCH.md §3.5).
+ * Which look a deck gets is its `memeLook`, assigned by the writer. Faces are
+ * allowed here, but only invented ones. The caption is drawn by the template,
+ * never by the image model.
  */
-export const MEME_STYLE = [
-  "Candid, funny, instantly readable reaction photo, shot on a phone camera, bright natural light, sharp focus on the subject, true-to-life colour.",
-  "A tight close-up of one subject caught mid-reaction: the face fills the centre of the frame and shows one exaggerated, unmistakable emotion, played completely straight — the comedy is how seriously the subject is taking it.",
-  "Vertical 9:16 composition: the face sits in the middle third of the frame, eyes just above centre; the top quarter and the bottom third hold nothing important, because caption text will be overlaid there.",
-  "One continuous full-bleed photograph that fills the whole frame edge to edge: no borders, bands, bars, panels, split frames or blurred padding — the real background simply continues, out of focus, above and below the subject.",
-  NO_TEXT,
-  "Any person is an ordinary, anonymous, invented adult — never a celebrity, public figure, or character from a film, show or game.",
-].join(" ");
+export const MEME_STYLE = memeStyle(DEFAULT_LOOK);
+
+const BAND_ATTEMPTS = 3;
+/** Mean edge strength (0–255) below which the bottom tenth of a photo counts as blank. */
+const BAND_EDGE_MIN = 8;
+
+/**
+ * Did the image model leave a blank or blurred band along the bottom?
+ *
+ * It does this to about one meme photo in four, whatever the prompt says (a
+ * flat beige bar on 2026-10-09, then a strip of blur): the photo simply stops
+ * four-fifths of the way down. Measured on eleven real photos, the mean Sobel
+ * edge strength of the bottom tenth was 2.0 and 4.4 for the two with a band
+ * and 20.6–117 for the nine without, so the test is that number against 8.
+ * Uses ffmpeg (already needed for the Instagram clips); without it, or with
+ * MEME_BAND_CHECK=0, nothing is checked.
+ */
+export function blankBand(file) {
+  if (process.env.MEME_BAND_CHECK === "0") return false;
+  try {
+    const r = spawnSync(findFfmpeg(), ["-hide_banner", "-i", file, "-vf",
+      "crop=iw:ih*0.10:0:ih*0.90,format=gray,sobel,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-",
+      "-f", "null", "-"], { encoding: "utf8", timeout: 30_000 });
+    const m = `${r.stdout}${r.stderr}`.match(/YAVG=([\d.]+)/);
+    return m ? Number(m[1]) < BAND_EDGE_MIN : false;
+  } catch { return false; }
+}
 
 const EXT = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" };
 
@@ -82,7 +112,7 @@ export async function makeImages(deckIds, { log = console.log } = {}) {
     for (const [i, slide] of (deck.slides || []).entries()) {
       if (!slide.image?.prompt) continue;
       const n = String(i + 1).padStart(2, "0");
-      const style = slide.meme ? MEME_STYLE : STYLE;
+      const style = slide.meme ? memeStyle(deck.memeLook) : STYLE;
       const h = hash(`${IMAGE_MODEL}\n${slide.image.prompt}\n${style}`);
 
       // Already generated for exactly this prompt?
@@ -101,11 +131,19 @@ export async function makeImages(deckIds, { log = console.log } = {}) {
       }
 
       try {
-        const img = await generateImage(`${slide.image.prompt.trim()}\n\n${style}`, { aspectRatio: "9:16" });
-        const ext = EXT[img.mimeType] || "png";
         mkdirSync(dir, { recursive: true });
-        const name = `${n}-${h}.${ext}`;
-        writeFileSync(join(dir, name), img.bytes);
+        // A meme photo that came back with a blank bar is asked for again —
+        // twice at most, and the last one is kept either way: a photo with a
+        // bar under the headline still beats a hook with no photo.
+        let img, ext, name;
+        for (let attempt = 1; ; attempt++) {
+          img = await generateImage(`${slide.image.prompt.trim()}\n\n${style}`, { aspectRatio: "9:16" });
+          ext = EXT[img.mimeType] || "png";
+          name = `${n}-${h}.${ext}`;
+          writeFileSync(join(dir, name), img.bytes);
+          if (!slide.meme || attempt >= BAND_ATTEMPTS || !blankBand(join(dir, name))) break;
+          log(`  ↻ ${deckId} slide ${n}: the photo has a blank band along the bottom — asking again (${attempt}/${BAND_ATTEMPTS - 1})`);
+        }
         slide.image.file = name;
         slide.image.model = IMAGE_MODEL;
         generated++;

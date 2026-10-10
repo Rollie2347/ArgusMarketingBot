@@ -79,6 +79,7 @@ it is not a way round this.
 | `templates/render.mjs` | Slide object → HTML. Add a slide type here and in `theme.css`. |
 | `scripts/make-slideshow.mjs` | The renderer. PNG + JPEG per slide. No npm dependencies. |
 | `scripts/write-decks.mjs` | The daily deck writer (Gemini), strict-validated. |
+| `lib/trends.mjs` | The trend scout: this week's meme caption formats, by search, phrasing only. Result and reasons in `bot/state/trends.json`. |
 | `scripts/make-images.mjs` | Slide photos (Gemini image model), cached by prompt. |
 | `scripts/daily.mjs` | write → images → render → enqueue, idempotent. |
 | `lib/` | Shared: paths (`MARKETING_DATA_DIR`), validation, Gemini client, `.env` loader. |

@@ -84,10 +84,36 @@ decks use it on the hook slide and at most one other.
 
 `"meme"` (hook slide only, ≤ 12 words; the writer is asked for ≤ 10) is drawn at the top of slide 1 in platform caption style —
 white, black outline — over the photo, with the headline underneath; `kicker` and `sub` are not
-drawn. The photo is generated as a reaction shot (`MEME_STYLE` in `scripts/make-images.mjs`), the
-one place a generated face is allowed. The caption is published copy and goes through the same
-banned-phrase scan as everything else. Memes are original: no existing templates, celebrities,
-characters or brands. `config.json` `memeHook: true` makes the daily writer require one.
+drawn. The photo is generated as a flash snapshot of a scene (`MEME_STYLE` in
+`scripts/make-images.mjs`): one subject doing the thing the caption is about, with the object in
+frame, something visibly wrong about it — never a portrait of an animal looking at the camera, which
+the writer now refuses (`macro`, `portrait`, `extreme close-up`, or a prompt under 20 words). It is
+the one place a generated face is allowed. The caption is published copy and goes through the same
+banned-phrase scan as everything else. `config.json` `memeHook: true` makes the daily writer require one.
+
+**Borrow the phrasing, never the picture** (2026-10-09). The caption is written in a format people
+are using this week — the trend scout (`lib/trends.mjs`) finds them by search each morning and
+keeps the ones that are wording only — over our own generated photo. Never an existing meme image
+or clip, a celebrity or other real person, a film/show/game character, a song, or a brand.
+
+A generated deck also carries, at the top level:
+
+- `"memeFormat"` — the name of the format the caption uses, from the list the writer was offered
+  that day (this week's formats, then the evergreen `me` / `pov` / `nobody-me` / `when-you` /
+  `me-at-time`). One format per deck per batch; an evergreen one only when the scout found fewer
+  current formats than there are decks. **This is the field to group posts by when comparing swipe
+  rates** — put it in TRACKING.md's Notes column.
+- `"memeSubject"` — the hook photo's subject in 1–3 words, as its image prompt has it.
+- `"memeLook"` — how the hook photo is made: one of the looks in `lib/looks.mjs`
+  (`flash-snapshot`, `animal-on-the-job`, `oil-painting`, `wildlife-doc`, `pov-judged`). Set by the
+  writer, not the model: each day's decks get the looks with the best ✅ record in Telegram (a look
+  that ran yesterday is marked down a little, so equals take turns) and the last deck always gets
+  the look tried least. To add a look, add an entry there; it is picked up as the experiment the
+  next morning. A deck without one renders as `flash-snapshot`.
+
+The writer refuses a meme whose caption shares three content words with one from the last 7 days
+(`MEME_REPEAT_DAYS`), or whose photo subject appeared in one — the first nine memes were one joke
+told nine times.
 
 ## Generated decks
 
