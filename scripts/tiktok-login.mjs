@@ -13,10 +13,17 @@
  */
 
 import "../lib/env.mjs";
-import { openBrowser } from "../lib/browser.mjs";
+import { openBrowser, tiktokSessionLive, clearTiktokSession } from "../lib/browser.mjs";
 
 const ctx = await openBrowser({ visible: true });
 const page = ctx.pages()[0] || (await ctx.newPage());
+if (await tiktokSessionLive(page)) {
+  console.log("  ✓ TikTok is already logged in, and the upload page opens. Nothing to do.");
+  await ctx.close().catch(() => {});
+  process.exit(0);
+}
+// A revoked session leaves its cookie behind; clear it so the wait below sees only a new login.
+await clearTiktokSession(ctx);
 await page.goto("https://www.tiktok.com/login", { waitUntil: "domcontentloaded" });
 console.log("\n  A Chrome window is open at TikTok's login page. Log in as myargusai.");
 console.log("  Waiting up to 15 minutes…\n");

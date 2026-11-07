@@ -466,6 +466,22 @@ function dailyRetryDue(day, today) {
     (day.attempts || 1) < DAILY_MAX_ATTEMPTS && Date.now() - Date.parse(day.finishedAt) >= DAILY_RETRY_MS;
 }
 
+// On 2026-11-04 TikTok revoked the bot's session overnight and nobody knew
+// until three approved posts failed. Checking before the batch puts the
+// warning ahead of the decks, while there's time to rescan.
+async function warnIfTiktokLoggedOut() {
+  if (config.publishers.tiktok !== "tiktokweb" || process.env.DRY_RUN === "1") return;
+  try {
+    const { checkTiktokLogin } = await import("../lib/browser.mjs");
+    if (await checkTiktokLogin()) { console.log("  ✓ TikTok login checked: still logged in"); return; }
+    console.log("  ⚠️ TikTok login checked: logged out");
+    await say("⚠️ <b>TikTok is logged out</b> on the posting browser, so today's TikTok posts would fail. Send /tiktoklogin and scan the QR code before approving.");
+  } catch (err) {
+    // A failed check must never hold up the batch.
+    console.error(`  ! TikTok login check failed: ${tg.redact(err.message)}`);
+  }
+}
+
 let dailyRunning = false;
 async function runDaily({ force = false, reason }) {
   if (dailyRunning) { await say("A batch is already being generated."); return; }
@@ -480,6 +496,7 @@ async function runDaily({ force = false, reason }) {
     // Silent when it runs on its own schedule — the decks arriving is the
     // message. Only a /generate you typed gets an acknowledgement.
     if (!/scheduled/.test(reason)) await say("🛠 Making new slideshows — they'll arrive here in a few minutes.");
+    await warnIfTiktokLoggedOut();
     const { code, out } = await new Promise((resolve) => {
       const p = spawn(process.execPath, [join(MARKETING_ROOT, "scripts", "daily.mjs"), ...(force ? ["--force"] : [])], { cwd: MARKETING_ROOT, env: process.env });
       const chunks = [];
